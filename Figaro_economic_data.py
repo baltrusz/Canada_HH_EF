@@ -26,6 +26,7 @@ using the import line above.
 # %%
 import os
 import time
+from types import SimpleNamespace
 import numpy as np
 import pandas as pd
 
@@ -51,7 +52,8 @@ def figaro_economic_data(figaro_folder, first_year, last_year, edition_economic_
         Y : np.ndarray, shape (m*n, m*k, n_years)      final demand
         Z : np.ndarray, shape (m*n, m*n, n_years)      intermediate flows
         country_sector_combined : list[str]            row/col labels
-        regions, sectors, FDcategories : pd.DataFrame  meta.xlsx sheets
+        meta : SimpleNamespace                         meta.xlsx sheets
+            .regions, .sectors, .FDcategories : pd.DataFrame
         m, n, mn, k : int                              dimension constants
         figaro : dict[int, pd.DataFrame]               raw yearly DataFrames
     """
@@ -102,6 +104,13 @@ def figaro_economic_data(figaro_folder, first_year, last_year, edition_economic_
     regions = pd.read_excel(meta_path, sheet_name="country")
     sectors = pd.read_excel(meta_path, sheet_name="sector")
     FDcategories = pd.read_excel(meta_path, sheet_name="final_demand")
+
+    # Bundle meta sheets into a single namespace (access as meta.regions, etc.)
+    meta = SimpleNamespace(
+        regions=regions,
+        sectors=sectors,
+        FDcategories=FDcategories,
+    )
 
     # ---- 5. Dimension constants (computed from the meta sheets) ----
     m = len(regions)          # number of regions
@@ -179,9 +188,7 @@ def figaro_economic_data(figaro_folder, first_year, last_year, edition_economic_
         "Y": Y,
         "Z": Z,
         "country_sector_combined": country_sector_combined,
-        "regions": regions,
-        "sectors": sectors,
-        "FDcategories": FDcategories,
+        "meta": meta,
         "m": m,
         "n": n,
         "mn": mn,

@@ -21,17 +21,19 @@ sum_exp.to_frame().to_clipboard()
 df.describe()
 
 # %%
-# Columns to multiply by WeightID
+# Columns to multiply by WeightID: check with COICOP_to_FIGARO_Bridge.xlsx in tab
+#COICOP_to_FIGARO_Bridge row 8
 cols = [
-    'FD001', 'SH003', 'SH010', 'SH031', 'SH032', 'SH033', 'SH034', 'SH042',
-    'SH061', 'SH044', 'SH062', 'SH060', 'SH046', 'SH047', 'SH050', 'CS003',
-    'CS007', 'CS008', 'CS020', 'HO002', 'HO003', 'HO010', 'HO014', 'HO018',
-    'HO022', 'CC001', 'HF002', 'HE001', 'HE017', 'HE020', 'CL030', 'TR003',
-    'TR020', 'TR031', 'TR085', 'TR033', 'TR034', 'TR071', 'TR036', 'TR038',
-    'TR039', 'TR070', 'HC002_D', 'HC002_C', 'HC022', 'PC001', 'RE124', 'RE990',
-    'RE006', 'RE007', 'RE010_D', 'RE010_C', 'RE016', 'RE022', 'RE032', 'RE040',
-    'RE062', 'RE063', 'RE066', 'RE067', 'RE090', 'RE074', 'RE140', 'RV001',
-    'ED002', 'RO001', 'TA018', 'GC001', 'ME039', 'ME040',
+    'FD003', 'FD990', 'SH003', 'SH011',	'SH082', 'SH991', 'SH015', 'SH016',
+    'SH031', 'SH032', 'SH033', 'SH034', 'SH042', 'SH061', 'SH044', 'SH062',
+    'SH060', 'SH046', 'SH047', 'SH050', 'CS003', 'CS007', 'CS008', 'CS020',
+    'HO002', 'HO003', 'HO010', 'HO014', 'HO018', 'HO022', 'CC001', 'HF002',
+    'HE001', 'HE017', 'HE020', 'CL030', 'TR003', 'TR020', 'TR031', 'TR085',
+    'TR033', 'TR034', 'TR071', 'TR036', 'TR038', 'TR039', 'TR070', 'HC002_D',
+    'HC002_C', 'HC022', 'PC001', 'RE124', 'RE990','RE006', 'RE007', 'RE010_D',
+    'RE010_C', 'RE016', 'RE022', 'RE032', 'RE040','RE062', 'RE063', 'RE066',
+    'RE067', 'RE090', 'RE074', 'RE140', 'RV001', 'ED002', 'RO001', 'TA018',
+    'GC001', 'ME039', 'ME040',
 ]
 
 # Multiply each column by WeightID
