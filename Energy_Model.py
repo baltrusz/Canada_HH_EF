@@ -1,12 +1,49 @@
-# Load economic IO data from FIGARO
-from Figaro_economic_data import figaro_economic_data
+"""
+Energy Model — main script.
 
+Define all file paths and imports once in the Setup cell, then run the
+numbered cells in order with Ctrl+Enter.
+"""
+
+# %% Setup
+import os
+import pandas as pd
+
+from Figaro_economic_data import figaro_economic_data
+from SHS_EDM_2019_data import shs_2019_data
+from NACE_COICOP_mask import nace_to_coicop_mask
+from RAS_balancing import ras_balancing
+
+# --- File paths (change once per machine) ---
+DATA_DIR = r"C:\Users\marta.baltruszewicz\OneDrive - Asplan Viak\Documents\additional_projects\Canada_hh_energy\Data"
+FIGARO_FOLDER = r"C:\Users\marta.baltruszewicz\OneDrive - Asplan Viak\Documents - 403001-01 Utvikling og vedlikehold klimakost\General\Utslippsfaktorer\Kryssløpsanalyse\FIGARO data"
+
+SAS_PATH = os.path.join(
+    DATA_DIR,
+    r"OneDrive_2026-03-09\Survey of Household Spending\SHS_EDM_2019\Data\SAS\pumf_shs2019.sas7bdat",
+)
+BRIDGE_PATH = os.path.join(DATA_DIR, "COICOP_to_FIGARO_Bridge.xlsx")
+IEA_PATH = os.path.join(DATA_DIR, "IEA_data.xlsx")
+NACE_IEA_PATH = os.path.join(DATA_DIR, "IEA_NACE_mapping.xlsx")
+
+# --- Country / household-category to analyse ---
+COUNTRY_CODE = "CA"          # country code in regions.iloc[:, 1]
+HH_CATEGORY = "P3_S14"       # household consumption final-demand category
+FD_CATEGORIES = ["P3_S13", "P3_S14", "P3_S15", "P51G", "P5M"]
+
+
+# %% Cell 1 — Load FIGARO economic IO data
+# The household FD vector for COUNTRY_CODE is also computed inside the
+# function and returned under the key f"{COUNTRY_CODE}_Y_hh".
 result = figaro_economic_data(
-        figaro_folder=r"C:\Users\marta.baltruszewicz\OneDrive - Asplan Viak\Documents - 403001-01 Utvikling og vedlikehold klimakost\General\Utslippsfaktorer\Kryssløpsanalyse\FIGARO data",
-        first_year=2019,
-        last_year=2019,
-        edition_economic_data=2501,
-    )
+    figaro_folder=FIGARO_FOLDER,
+    first_year=2019,
+    last_year=2019,
+    edition_economic_data=2501,
+    country_code=COUNTRY_CODE,
+    hh_category=HH_CATEGORY,
+    fd_categories=FD_CATEGORIES,
+)
 X = result["X"]
 Y = result["Y"]
 Z = result["Z"]
@@ -18,98 +55,198 @@ regions = meta.regions
 sectors = meta.sectors
 FDcategories = meta.FDcategories
 
-#Load SHS 2019 household spends
-from SHS_EDM_2019_data import shs_2019_data
-
-SHS_2019_data = shs_2019_data(
-        sas_path=r"C:\Users\marta.baltruszewicz\OneDrive - Asplan Viak\Documents\additional_projects\Canada_hh_energy\Data\OneDrive_2026-03-09\Survey of Household Spending\SHS_EDM_2019\Data\SAS\pumf_shs2019.sas7bdat"
-    )
+# Pull out the country household FD vector. Key in the result dict follows
+# the country code (e.g. "CA_Y_hh"), but we use a generic local name so the
+# rest of the code is country-agnostic.
+Y_hh = result[f"{COUNTRY_CODE}_Y_hh"]
 
 
+# %% Cell 2 — Load IEA energy data (3 different views, all from IEA_data.xlsx)
 
-# %%
-# Load NACE-to-COICOP bridge matrices (75-cat plus aggregation masks)
-from NACE_COICOP_mask import nace_to_coicop_mask, load_coicop_aggregation_masks
+# IEA_FC_tot: total final consumption.
+# Includes road indirect and international bunkers.
+IEA_FC_tot = pd.read_excel(
+    IEA_PATH,
+    sheet_name="IEA_to_Figaro_data",
+    usecols="A:F,M",
+)
 
-BRIDGE_PATH = r"C:\Users\marta.baltruszewicz\OneDrive - Asplan Viak\Documents\additional_projects\Canada_hh_energy\Data\COICOP_to_FIGARO_Bridge.xlsx"
+# NACE-to-IEA bridge matrix (many-to-many).
+# File: IEA_NACE_mapping.xlsx, tab: NACE_IEA_Bridge.
+# Row 1 = column names; columns A and B = NACE row labels; D2:Z63 = 0/1 matrix.
+NACE_to_IEA_mask = pd.read_excel(
+    NACE_IEA_PATH,
+    sheet_name="NACE_IEA_Bridge",
+    usecols="A:B,D:Z",
+    header=0,
+    nrows=62,
+)
 
+print(f"IEA_FC_tot shape:             {IEA_FC_tot.shape}")
+print(f"NACE_to_IEA_mask shape:       {NACE_to_IEA_mask.shape}")
+
+
+# %% Cell 3 — Indirect energy intensity + household indirect footprint
+import numpy as np
+from Indir_E_e import indir_E_e
+
+m = result["m"]   # 46 regions
+n = result["n"]   # 62 sectors
+
+indir = indir_E_e(
+    Z=Z, X=X, Y_hh=Y_hh,
+    sectors=sectors,
+    NACE_to_IEA_mask=NACE_to_IEA_mask,
+    IEA_FC_tot=IEA_FC_tot,
+    m=m, n=n,
+)
+E_TJ = indir["E_TJ"]
+e_NACE = indir["e_NACE"]
+L = indir["L"]
+hh_EF_NACE_indir = indir["hh_EF_NACE_indir"]
+
+
+# %% Cell 4 — Load SHS 2019 household spends
+# The loader returns a dict with two flavours of the same data, both with
+# expenditure values multiplied by the household weight (WeightD):
+#   - CAD_WGHT     : weighted spends in CAD per household
+#   - Mln_EUR_WGHT : same spends converted to million EUR using the
+#                     2019 exchange rate (1 EUR = 1.49 CAD), i.e.
+#                     CAD value ÷ 1.49 ÷ 1,000,000.
+# Each row is one household; columns are CaseID, WeightD, then 75 expenditures.
+shs_dict = shs_2019_data(sas_path=SAS_PATH, exchange_rate=1.49)
+SHS_2019_data_CAD_WGHT     = shs_dict["CAD_WGHT"]
+SHS_2019_data_Mln_EUR_WGHT = shs_dict["Mln_EUR_WGHT"]
+
+# Strip the "_wght" suffix from expenditure columns so we have clean COICOP
+# codes throughout the rest of the pipeline. CaseID and WeightD stay as-is.
+SHS_2019_data_CAD_WGHT.columns     = [c.removesuffix("_wght") for c in SHS_2019_data_CAD_WGHT.columns]
+SHS_2019_data_Mln_EUR_WGHT.columns = [c.removesuffix("_wght") for c in SHS_2019_data_Mln_EUR_WGHT.columns]
+
+# COICOP_code: canonical list of the 75 COICOP codes (no _wght suffix).
+# Use this to match against direct/indirect energy tables.
+COICOP_code = SHS_2019_data_CAD_WGHT.columns[2:].tolist()   # skip CaseID + WeightD
+print(f"COICOP_code ({len(COICOP_code)} categories): first 5 = {COICOP_code[:5]}")
+
+
+# %% Cell 5 — Load NACE-to-COICOP bridge matrices (75-cat plus aggregation masks)
 NACE_to_COICOP_mask = nace_to_coicop_mask(
     bridge_path=BRIDGE_PATH,
     sectors=sectors,
-    shs_data=SHS_2019_data,
+    shs_data=SHS_2019_data_CAD_WGHT,    # column names only — values not used
 )
 
-# 4 aggregation masks from tab COICOP_to_COICOPaggr:
-#   COICOP75_to_COICOP32 (32 x 75) - aggregates 75 -> 32 COICOP categories
-#   COICOP75_to_COICOP12 (12 x 75) - aggregates 75 -> 12 COICOP categories
-#   NACE_to_COICOP32     (62 x 32) - bridge NACE sectors -> 32 COICOP
-#   NACE_to_COICOP12     (62 x 12) - bridge NACE sectors -> 12 COICOP
-aggr_masks = load_coicop_aggregation_masks(BRIDGE_PATH)
-COICOP75_to_COICOP32_mask = aggr_masks["COICOP75_to_COICOP32"]
-COICOP75_to_COICOP12_mask = aggr_masks["COICOP75_to_COICOP12"]
-NACE_to_COICOP32_mask = aggr_masks["NACE_to_COICOP32"]
-NACE_to_COICOP12_mask = aggr_masks["NACE_to_COICOP12"]
+# %% Cell 6 — RAS-balance SHS spends against NACE sectors, then distribute
+# the household indirect energy footprint across COICOP categories.
 
+# SHS expenditure totals (million EUR) at the 75-COICOP level. Skip CaseID
+# and WeightD (first two columns) and sum across all households.
+SHS_2019_75cat = SHS_2019_data_Mln_EUR_WGHT.iloc[:, 2:].sum().to_numpy(dtype=float)  # (75,)
+print(f"SHS_2019_75cat shape: {SHS_2019_75cat.shape}, sum (mln EUR) = {SHS_2019_75cat.sum():,.2f}")
 
-# %%
-# Compute SHS expenditure totals (CAD) at each aggregation level
-# Skip CaseID and WeightD (first two columns) and sum across all households.
-SHS_2019_75cat = SHS_2019_data.iloc[:, 2:].sum().to_numpy(dtype=float)   # shape (75,)
-
-# Aggregate to 32 and 12 categories using the COICOP aggregation masks.
-# Each row of the aggregation mask is a 0/1 indicator selecting which 75-cat
-# entries roll up into that aggregated category.
-SHS_2019_32cat = COICOP75_to_COICOP32_mask @ SHS_2019_75cat              # shape (32,)
-SHS_2019_12cat = COICOP75_to_COICOP12_mask @ SHS_2019_75cat              # shape (12,)
-
-print(f"SHS_2019_75cat shape: {SHS_2019_75cat.shape}, sum = {SHS_2019_75cat.sum():,.2f}")
-print(f"SHS_2019_32cat shape: {SHS_2019_32cat.shape}, sum = {SHS_2019_32cat.sum():,.2f}")
-print(f"SHS_2019_12cat shape: {SHS_2019_12cat.shape}, sum = {SHS_2019_12cat.sum():,.2f}")
-
-
-# %%
-# RAS balancing — choose which COICOP aggregation level to use
-from RAS_balancing import ras_balancing
-
-# Switch: 75, 32, or 12
-RAS_LEVEL = 75
-
-if RAS_LEVEL == 75:
-    nace_mask = NACE_to_COICOP_mask
-    shs_totals = SHS_2019_data
-elif RAS_LEVEL == 32:
-    nace_mask = NACE_to_COICOP32_mask
-    shs_totals = SHS_2019_32cat
-elif RAS_LEVEL == 12:
-    nace_mask = NACE_to_COICOP12_mask
-    shs_totals = SHS_2019_12cat
-else:
-    raise ValueError(f"RAS_LEVEL must be 75, 32, or 12 — got {RAS_LEVEL}")
-
-print(f"\nRunning RAS at COICOP-{RAS_LEVEL} level")
-
+# RAS balancing — feed the already-EUR-converted SHS values.
 ras_result = ras_balancing(
-    nace_coicop_mask=nace_mask,
-    shs_totals_cad=shs_totals,
+    nace_coicop_mask=NACE_to_COICOP_mask,
+    shs_eur=SHS_2019_data_Mln_EUR_WGHT,
     Y=Y,
     regions=regions,
     m=result["m"],
     n=result["n"],
     k=result["k"],
     year_idx=0,
-    exchange_rate=1.49,  # 1 EUR = 1.49 CAD in 2019 (Bank of Canada annual avg)
-    country_code="CA",
+    country_code=COUNTRY_CODE,
+    fd_categories=FD_CATEGORIES,
+    hh_category=HH_CATEGORY,
     mode="rows",         # row-only distribution (columns are best-effort)
 )
-
-# Pull intermediate values out for inspection in the Variables panel
-balanced_hh = ras_result["balanced"]
-CA_Y_hh = ras_result["CA_Y_hh"]
-CA_Y_hh_aggr = ras_result["CA_Y_hh_aggr"]
-shs_totals_eur = ras_result["shs_totals_eur"]
-shs_total_eur = ras_result["shs_total_eur"]
-shs_totals_adj = ras_result["shs_totals_adj"]
-
-print(f"\nBalanced matrix shape: {balanced_hh.shape}")
+RAS_NACE_COICOP_spends = ras_result["balanced"]   # units: million EUR
+RAS_nace_to_coicop_shares = ras_result["RAS_nace_to_coicop_shares"]
+print(f"\nBalanced matrix shape: {RAS_NACE_COICOP_spends.shape}")
 print(f"Converged: {ras_result['converged']}, iterations: {ras_result['iterations']}")
+
+# Aggregate household energy footprint to 62 NACE sectors.
+# hh_EF_NACE_indir has shape (m*n,) organised as country blocks of n=62 sectors.
+# Sum across all 46 countries for each sector (MATLAB equivalent: 1:62:end).
+n_sec = result["n"]
+hh_EF_NACE = pd.Series(
+    np.array([hh_EF_NACE_indir[s::n_sec].sum() for s in range(n_sec)]),
+    index=sectors.iloc[:, 1].astype(str).str.strip().tolist(),
+    name="hh_EF_NACE",
+)
+print(f"hh_EF_NACE shape: {hh_EF_NACE.shape}, total = {hh_EF_NACE.sum():,.2f} TJ")
+
+# Distribute the per-NACE energy footprint across COICOP categories using
+# RAS_nace_to_coicop_shares. Each row of the (62 x 75) shares matrix is
+# multiplied by the corresponding scalar from hh_EF_NACE.
+hh_EF_indir_COICOP = RAS_nace_to_coicop_shares.multiply(hh_EF_NACE, axis=0)
+print(f"hh_EF_indir_COICOP shape: {hh_EF_indir_COICOP.shape}, "
+      f"total = {hh_EF_indir_COICOP.values.sum():,.2f} TJ")
+
+# Indirect Energy intensity per COICOP category:
+#   e_COICOP[j] = sum_i hh_EF_indir_COICOP[i, j]  /  sum_i RAS_NACE_COICOP_spends[i, j]
+#   units: TJ per million EUR
+e_COICOP_indir = hh_EF_indir_COICOP.sum(axis=0) / RAS_NACE_COICOP_spends.sum(axis=0)
+e_COICOP_indir.name = "e_COICOP_indir"
+print(f"e_COICOP_indir shape: {e_COICOP_indir.shape} (units: TJ / million EUR)")
+
+
+# %% Cell 9 — Direct energy intensity per COICOP
+# Import direct energy values per COICOP from IEA_data.xlsx,
+# tab "Resid_Road_split_to_COICOP", cells A28:C33.
+# Row 28 is the header; rows 29-33 are 5 data rows.
+# Layout: column A = description, column B = COICOP code, column C = value (TJ).
+dir_E_road_resid = pd.read_excel(
+    IEA_PATH,
+    sheet_name="Resid_Road_split_to_COICOP",
+    usecols="A:C",
+    header=0,
+    skiprows=27,
+    nrows=5,
+)
+print(f"dir_E_road_resid shape: {dir_E_road_resid.shape}")
+print(dir_E_road_resid)
+
+# e_COICOP_dir[code] = direct_energy_value / column_sum_in_RAS_NACE_COICOP_spends
+# Match COICOP codes (column 2 = index 1) to RAS_NACE_COICOP_spends column names.
+e_COICOP_dir = pd.Series(dtype=float, name="e_COICOP_dir")
+for _, row in dir_E_road_resid.iterrows():
+    code = str(row.iloc[1]).strip()       # COICOP code
+    val = float(row.iloc[2])              # direct energy value (TJ)
+    if code not in RAS_NACE_COICOP_spends.columns:
+        raise ValueError(
+            f"COICOP code {code!r} not found in RAS_NACE_COICOP_spends columns"
+        )
+    col_sum = RAS_NACE_COICOP_spends[code].sum()
+    e_COICOP_dir[code] = val / col_sum
+
+print(f"\ne_COICOP_dir ({len(e_COICOP_dir)} categories):")
+print(e_COICOP_dir)
+
+
+# %% Cell 10 — Combine indirect + direct COICOP intensities
+# Build a DataFrame with two columns ('indir', 'dir'). Categories that don't
+# appear in e_COICOP_dir get 0 in the 'dir' column.
+e_COICOP_TJperMlnEur = pd.DataFrame({
+    "indir": e_COICOP_indir,
+    "dir":   e_COICOP_dir.reindex(e_COICOP_indir.index, fill_value=0.0),
+})
+print(f"e_COICOP_TJperMlnEur shape: {e_COICOP_TJperMlnEur.shape}")
+print(e_COICOP_TJperMlnEur.head())
+
+# Energy footprint (TJ) per COICOP — same logic as above but with absolute
+# TJ values instead of intensities.
+#   hh_EF_indir = column sums of hh_EF_indir_COICOP (75 values, TJ)
+#   hh_EF_dir   = direct TJ values from dir_E_road_resid, matched to COICOP
+#                 codes; categories not in dir_E_road_resid get 0.
+hh_EF_dir_COICOP = pd.Series(
+    {str(row.iloc[1]).strip(): float(row.iloc[2]) for _, row in dir_E_road_resid.iterrows()},
+    name="hh_EF_dir",
+)
+E_COICOP_EF_TJ = pd.DataFrame({
+    "hh_EF_indir": hh_EF_indir_COICOP.sum(axis=0),
+    "hh_EF_dir":   hh_EF_dir_COICOP.reindex(hh_EF_indir_COICOP.columns, fill_value=0.0),
+})
+print(f"\nE_COICOP_EF_TJ shape: {E_COICOP_EF_TJ.shape} (units: TJ)")
+print(E_COICOP_EF_TJ.head())
+
 # %%

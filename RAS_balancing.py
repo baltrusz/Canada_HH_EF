@@ -19,13 +19,12 @@ Example usage from another script:
     from RAS_balancing import ras_balancing
 
     balanced = ras_balancing(
-        mask=NACE_to_COICOP_mask,
-        shs_data=SHS_2019_data,
+        nace_coicop_mask=NACE_to_COICOP_mask,
+        shs_eur=SHS_2019_data_Mln_EUR_WGHT,    # already in million EUR
         Y=Y,
         regions=meta.regions,
         m=46, n=62, k=5,
         year_idx=0,
-        exchange_rate=1.49,
         country_code="CA",
     )
 """
@@ -37,7 +36,7 @@ import pandas as pd
 
 def ras_balancing(
     nace_coicop_mask,
-    shs_totals_cad,
+    shs_eur,
     Y,
     regions,
     m,
@@ -46,7 +45,6 @@ def ras_balancing(
     sector_labels=None,
     coicop_labels=None,
     year_idx=0,
-    exchange_rate=1.49,
     country_code="CA",
     fd_categories=None,
     hh_category="P3_S14",
@@ -64,8 +62,8 @@ def ras_balancing(
           - np.ndarray of shape (n_sectors, n_coicop) with 0/1 values
           - DataFrame in the original 75-cat format (col 0 = sector code,
             col 1 = label, cols 2+ = COICOP). The function extracts the data.
-    shs_totals_cad : np.ndarray, pd.Series, or pd.DataFrame
-        SHS expenditure totals in CAD. Either:
+    shs_eur : np.ndarray, pd.Series, or pd.DataFrame
+        SHS weighted expenditures already converted to million EUR. Either:
           - 1D np.ndarray / pd.Series of length n_coicop (already summed)
           - DataFrame with CaseID, WeightD, and expenditure columns; this
             function will sum the expenditure columns automatically.
@@ -85,8 +83,6 @@ def ras_balancing(
         mask/SHS DataFrame if not provided.
     year_idx : int
         Year slice of Y to use (default 0).
-    exchange_rate : float
-        CAD per EUR. 2019 = 1.49.
     country_code : str
         Country code for Canada in regions.iloc[:, 1] (default "CA").
     fd_categories : list of str
@@ -108,20 +104,8 @@ def ras_balancing(
     dict with keys:
         balanced : pd.DataFrame
             Balanced 62 x 75 matrix. Rows = NACE sectors, cols = COICOP.
-        CA_Y_hh : np.ndarray, shape (m*n,)
-            Canada's P3_S14 column extracted from Y (in million EUR).
-        CA_Y_hh_aggr : pd.Series
-            CA_Y_hh aggregated by sector across the 46 countries (length 62).
-        shs_totals_eur : pd.Series
-            SHS expenditure totals in million EUR by COICOP (length 75).
-        shs_total_eur : float
-            Sum of shs_totals_eur (million EUR).
-        shs_totals_adj : pd.Series
-            SHS totals after distributing the difference (length 75).
-        ca_y_hh_total : float
-            Sum of CA_Y_hh (million EUR).
-        diff : float
-            ca_y_hh_total - shs_total_eur (distributed across SHS shares).
+        RAS_nace_to_coicop_shares : pd.DataFrame
+            Row-normalised version of `balanced` (each row sums to 1).
         converged : bool
             Whether RAS converged within `max_iter` iterations.
         iterations : int
@@ -142,29 +126,24 @@ def ras_balancing(
         A0 = np.asarray(nace_coicop_mask, dtype=float)
         A0 = np.nan_to_num(A0, nan=0.0)
 
-    # ---- Normalise SHS totals input ----
-    if isinstance(shs_totals_cad, pd.DataFrame):
+    # ---- Normalise SHS totals input (already in million EUR) ----
+    if isinstance(shs_eur, pd.DataFrame):
         # Full SHS DataFrame with CaseID, WeightD, then expenditure cols
         if coicop_labels is None:
-            coicop_labels = [str(c) for c in shs_totals_cad.columns[2:]]
-        shs_totals_cad = shs_totals_cad.iloc[:, 2:].sum().to_numpy(dtype=float)
-    elif isinstance(shs_totals_cad, pd.Series):
+            coicop_labels = [str(c) for c in shs_eur.columns[2:]]
+        shs_totals_eur = shs_eur.iloc[:, 2:].sum().to_numpy(dtype=float)
+    elif isinstance(shs_eur, pd.Series):
         if coicop_labels is None:
-            coicop_labels = [str(c) for c in shs_totals_cad.index]
-        shs_totals_cad = shs_totals_cad.to_numpy(dtype=float)
+            coicop_labels = [str(c) for c in shs_eur.index]
+        shs_totals_eur = shs_eur.to_numpy(dtype=float)
     else:
-        shs_totals_cad = np.asarray(shs_totals_cad, dtype=float)
+        shs_totals_eur = np.asarray(shs_eur, dtype=float)
 
     # Default labels if still missing
     if sector_labels is None:
         sector_labels = [f"sector_{i}" for i in range(A0.shape[0])]
     if coicop_labels is None:
         coicop_labels = [f"cat_{j}" for j in range(A0.shape[1])]
-
-    # ---- 2. Convert to million EUR ----
-    # SHS is in CAD per household; CA_Y_hh is in million EUR.
-    # Divide by exchange rate to get EUR, then by 1,000,000 to get million EUR.
-    shs_totals_eur = shs_totals_cad / exchange_rate / 1_000_000
 
     # ---- 3. Extract Canada's household consumption from Y ----
     countries = regions.iloc[:, 1].astype(str).str.strip().tolist()
@@ -337,15 +316,31 @@ def ras_balancing(
     # Wrap as DataFrame with sector codes as rows, COICOP codes as columns
     balanced = pd.DataFrame(A, index=sector_labels, columns=coicop_labels)
 
+    # Row-normalised shares: each cell divided by its row sum so each row sums to 1.
+    # Zero-row safe: rows whose total is 0 stay all zero in the shares table.
+    row_sums = A.sum(axis=1)
+    safe_row_sums = np.where(row_sums == 0, 1.0, row_sums)
+    nace_to_coicop_shares = A / safe_row_sums[:, None]
+    RAS_nace_to_coicop_shares = pd.DataFrame(
+        nace_to_coicop_shares, index=sector_labels, columns=coicop_labels
+    )
+
+    # Sanity check: each non-empty row should sum to 1 (within tolerance)
+    share_row_sums = RAS_nace_to_coicop_shares.sum(axis=1).to_numpy()
+    expected = np.where(row_sums == 0, 0.0, 1.0)
+    max_dev = np.max(np.abs(share_row_sums - expected))
+    print(f"\nRAS_nace_to_coicop_shares row-sum check: max deviation = {max_dev:.2e}")
+    if max_dev < 1e-9:
+        print("  OK: every non-empty row sums to 100%.")
+    else:
+        offenders = np.where(np.abs(share_row_sums - expected) > 1e-9)[0]
+        print(f"  WARNING: {len(offenders)} rows do not sum to 100%.")
+        for i in offenders[:5]:
+            print(f"    {sector_labels[i]}: sum = {share_row_sums[i]:.6f}")
+
     return {
         "balanced": balanced,
-        "CA_Y_hh": CA_Y_hh,
-        "CA_Y_hh_aggr": pd.Series(CA_Y_hh_aggr, index=sector_labels, name="CA_Y_hh_aggr"),
-        "shs_totals_eur": pd.Series(shs_totals_eur, index=coicop_labels, name="shs_totals_eur"),
-        "shs_total_eur": shs_total_eur,
-        "shs_totals_adj": pd.Series(shs_totals_adj, index=coicop_labels, name="shs_totals_adj"),
-        "ca_y_hh_total": ca_y_hh_total,
-        "diff": diff,
+        "RAS_nace_to_coicop_shares": RAS_nace_to_coicop_shares,
         "converged": converged,
         "iterations": iterations,
     }
@@ -365,29 +360,34 @@ if __name__ == "__main__":
         figaro_folder=r"C:\Users\marta.baltruszewicz\OneDrive - Asplan Viak\Documents - 403001-01 Utvikling og vedlikehold klimakost\General\Utslippsfaktorer\Kryssløpsanalyse\FIGARO data",
         first_year=2019,
         last_year=2019,
+        country_code="CA",
         edition_economic_data=2501,
     )
 
-    SHS_2019_data = shs_2019_data(
-        sas_path=r"C:\Users\marta.baltruszewicz\OneDrive - Asplan Viak\Documents\additional_projects\Canada_hh_energy\Data\OneDrive_2026-03-09\Survey of Household Spending\SHS_EDM_2019\Data\SAS\pumf_shs2019.sas7bdat"
+    shs = shs_2019_data(
+        sas_path=r"C:\Users\marta.baltruszewicz\OneDrive - Asplan Viak\Documents\additional_projects\Canada_hh_energy\Data\OneDrive_2026-03-09\Survey of Household Spending\SHS_EDM_2019\Data\SAS\pumf_shs2019.sas7bdat",
+        exchange_rate=1.49,
     )
+    SHS_2019_data_Mln_EUR_WGHT = shs["Mln_EUR_WGHT"]
+    SHS_2019_data_Mln_EUR_WGHT.columns = [
+        c.removesuffix("_wght") for c in SHS_2019_data_Mln_EUR_WGHT.columns
+    ]
 
     NACE_to_COICOP_mask = nace_to_coicop_mask(
         bridge_path=r"C:\Users\marta.baltruszewicz\OneDrive - Asplan Viak\Documents\additional_projects\Canada_hh_energy\Data\COICOP_to_FIGARO_Bridge.xlsx",
         sectors=figaro_result["meta"].sectors,
-        shs_data=SHS_2019_data,
+        shs_data=SHS_2019_data_Mln_EUR_WGHT,
     )
 
     result = ras_balancing(
         nace_coicop_mask=NACE_to_COICOP_mask,
-        shs_totals_cad=SHS_2019_data,
+        shs_eur=SHS_2019_data_Mln_EUR_WGHT,
         Y=figaro_result["Y"],
         regions=figaro_result["meta"].regions,
         m=figaro_result["m"],
         n=figaro_result["n"],
         k=figaro_result["k"],
         year_idx=0,
-        exchange_rate=1.49,
         country_code="CA",
     )
 

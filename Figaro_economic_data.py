@@ -31,7 +31,15 @@ import numpy as np
 import pandas as pd
 
 
-def figaro_economic_data(figaro_folder, first_year, last_year, edition_economic_data=2501):
+def figaro_economic_data(
+    figaro_folder,
+    first_year,
+    last_year,
+    country_code,
+    edition_economic_data=2501,
+    hh_category="P3_S14",
+    fd_categories=None,
+):
     """
     Load FIGARO economic data and build X, Y, Z 3D arrays.
 
@@ -41,9 +49,17 @@ def figaro_economic_data(figaro_folder, first_year, last_year, edition_economic_
         Path to the locally-synced FIGARO data folder.
     first_year, last_year : int
         Inclusive year range, e.g. 2010 and 2023.
+    country_code : str
+        Country code (e.g. "CA"). The household FD vector for this country
+        is always returned under the key `f"{country_code}_Y_hh"`.
     edition_economic_data : int
         FIGARO edition number (default 2501). Used to build the file prefix
         `matrix_eu-ic-io_ind-by-ind_<edition>ed_<year>.csv`.
+    hh_category : str
+        Household consumption FD category (default "P3_S14").
+    fd_categories : list of str, optional
+        Order of FD categories along the columns of Y. Defaults to
+        ['P3_S13', 'P3_S14', 'P3_S15', 'P51G', 'P5M'].
 
     Returns
     -------
@@ -56,6 +72,8 @@ def figaro_economic_data(figaro_folder, first_year, last_year, edition_economic_
             .regions, .sectors, .FDcategories : pd.DataFrame
         m, n, mn, k : int                              dimension constants
         figaro : dict[int, pd.DataFrame]               raw yearly DataFrames
+        {country_code}_Y_hh : np.ndarray, shape (m*n,)
+            Household final demand for that country (year_idx=0).
     """
     # ---- 1. Validate folder ----
     if not os.path.isdir(figaro_folder):
@@ -183,7 +201,7 @@ def figaro_economic_data(figaro_folder, first_year, last_year, edition_economic_
     elapsed = time.time() - timer_start
     print(f"Done. Imported FIGARO economic data for {n_years} years in {elapsed:.2f} seconds")
 
-    return {
+    result = {
         "X": X,
         "Y": Y,
         "Z": Z,
@@ -195,6 +213,27 @@ def figaro_economic_data(figaro_folder, first_year, last_year, edition_economic_
         "k": k,
         "figaro": figaro,
     }
+
+    # ---- Extract the household FD vector for the chosen country ----
+    fd_cat_list = fd_categories if fd_categories is not None else final_demand_names
+    country_codes_list = regions.iloc[:, 1].astype(str).str.strip().tolist()
+    if country_code not in country_codes_list:
+        raise ValueError(
+            f"country_code {country_code!r} not found in regions.iloc[:, 1]"
+        )
+    if hh_category not in fd_cat_list:
+        raise ValueError(
+            f"hh_category {hh_category!r} not in fd_categories: {fd_cat_list}"
+        )
+    c_idx = country_codes_list.index(country_code)
+    fd_off = fd_cat_list.index(hh_category)
+    hh_col = c_idx * k + fd_off
+    y_hh = Y[:, hh_col, 0].astype(float).copy()
+    key = f"{country_code}_Y_hh"
+    result[key] = y_hh
+    print(f"{key} shape: {y_hh.shape}, total = {y_hh.sum():,.2f} (million EUR)")
+
+    return result
 
 
 # %%
@@ -214,6 +253,7 @@ if __name__ == "__main__":
         figaro_folder=FIGARO_FOLDER,
         first_year=2010,
         last_year=2023,
+        country_code="CA",
         edition_economic_data=2501,
     )
 

@@ -1,17 +1,27 @@
 """
 SHS 2019 data loader.
 
-Loads the Survey of Household Spending (SHS) 2019 SAS file, multiplies the
-selected expenditure columns by the household weight (WeightD), and returns
-the resulting DataFrame.
+Loads the Survey of Household Spending (SHS) 2019 SAS file and produces two
+weighted-expenditure DataFrames:
+
+  - SHS_2019_data_CAD_WGHT     : raw CAD values per household, each weighted
+                                  by the household weight (WeightD).
+  - SHS_2019_data_Mln_EUR_WGHT : the same data converted to million EUR using
+                                  the supplied exchange rate.
+
+Each row is one survey household; CaseID and WeightD are kept on the left,
+followed by the 75 expenditure columns (already weighted).
 
 Example usage from another script:
 
     from SHS_EDM_2019_data import shs_2019_data
 
-    SHS_2019_data = shs_2019_data(
-        sas_path=r"C:\\path\\to\\pumf_shs2019.sas7bdat"
+    shs = shs_2019_data(
+        sas_path=r"C:\\path\\to\\pumf_shs2019.sas7bdat",
+        exchange_rate=1.49,
     )
+    SHS_2019_data_CAD_WGHT     = shs["CAD_WGHT"]
+    SHS_2019_data_Mln_EUR_WGHT = shs["Mln_EUR_WGHT"]
 """
 
 # %%
@@ -19,23 +29,31 @@ import time
 import pandas as pd
 
 
-def shs_2019_data(sas_path):
+def shs_2019_data(sas_path, exchange_rate=1.49):
     """
-    Load the SHS 2019 PUMF SAS file and return a weighted-expenditure DataFrame.
+    Load the SHS 2019 PUMF SAS file and return weighted-expenditure DataFrames
+    in two currencies (CAD and million EUR).
 
-    Each selected expenditure column is multiplied by the WeightD column,
-    and the resulting DataFrame contains CaseID, WeightD, and all weighted
-    columns (suffixed with `_wght`).
+    Each expenditure column is multiplied by the household weight (WeightD).
+    The result is returned in two flavours:
+      - CAD_WGHT     : values in CAD per household, weighted.
+      - Mln_EUR_WGHT : the CAD values divided by `exchange_rate` and by
+                       1,000,000 to give million EUR per household, weighted.
 
     Parameters
     ----------
     sas_path : str
         Full path to the SHS .sas7bdat file.
+    exchange_rate : float
+        CAD per EUR (default 1.49, the 2019 Bank of Canada annual average).
 
     Returns
     -------
-    pd.DataFrame
-        Columns: CaseID, WeightD, <col>_wght for each expenditure column.
+    dict with keys:
+        "CAD_WGHT"     : pd.DataFrame
+            CaseID, WeightD, then 75 weighted expenditure columns (in CAD).
+        "Mln_EUR_WGHT" : pd.DataFrame
+            CaseID, WeightD, then 75 weighted expenditure columns (in million EUR).
     """
     timer_start = time.time()
 
@@ -57,16 +75,22 @@ def shs_2019_data(sas_path):
         'GC001', 'ME039', 'ME040',
     ]
 
-    # Multiply each column by WeightD and rename with _wght suffix
+    # Multiply each column by WeightD and tag with _wght suffix
     weighted = df[cols].multiply(df['WeightD'], axis=0)
     weighted.columns = [c + '_wght' for c in cols]
 
-    # Build final DataFrame with CaseID, WeightD, and weighted columns
-    result = pd.concat([df[['CaseID', 'WeightD']], weighted], axis=1)
+    # CAD version: CaseID, WeightD, then weighted expenditures (in CAD)
+    SHS_CAD = pd.concat([df[['CaseID', 'WeightD']], weighted], axis=1)
+
+    # Million-EUR version: same shape, expenditures divided by exchange rate
+    # and 1,000,000. CaseID and WeightD are NOT converted.
+    weighted_eur = weighted / exchange_rate / 1_000_000
+    SHS_EUR = pd.concat([df[['CaseID', 'WeightD']], weighted_eur], axis=1)
 
     elapsed = time.time() - timer_start
-    print(f"Imported SHS_2019_data in {elapsed:.2f} seconds")
-    return result
+    print(f"Imported SHS_2019_data in {elapsed:.2f} seconds "
+          f"(exchange rate {exchange_rate} CAD/EUR)")
+    return {"CAD_WGHT": SHS_CAD, "Mln_EUR_WGHT": SHS_EUR}
 
 
 # %%
@@ -76,6 +100,7 @@ def shs_2019_data(sas_path):
 if __name__ == "__main__":
     SAS_PATH = r"C:\Users\marta.baltruszewicz\OneDrive - Asplan Viak\Documents\additional_projects\Canada_hh_energy\Data\OneDrive_2026-03-09\Survey of Household Spending\SHS_EDM_2019\Data\SAS\pumf_shs2019.sas7bdat"
 
-    SHS_2019_data = shs_2019_data(sas_path=SAS_PATH)
-    print(SHS_2019_data.head())
-    print(f"Shape: {SHS_2019_data.shape}")
+    shs = shs_2019_data(sas_path=SAS_PATH, exchange_rate=1.49)
+    print(shs["CAD_WGHT"].head())
+    print(f"CAD shape:     {shs['CAD_WGHT'].shape}")
+    print(f"Mln EUR shape: {shs['Mln_EUR_WGHT'].shape}")
