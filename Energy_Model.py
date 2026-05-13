@@ -14,10 +14,25 @@ from SHS_EDM_2019_data import shs_2019_data
 from NACE_COICOP_mask import nace_to_coicop_mask
 from RAS_balancing import ras_balancing
 
-# --- File paths (change once per machine) ---
-DATA_DIR = r"C:\Users\marta.baltruszewicz\OneDrive - Asplan Viak\Documents\additional_projects\Canada_hh_energy\Data"
-FIGARO_FOLDER = r"C:\Users\marta.baltruszewicz\OneDrive - Asplan Viak\Documents - 403001-01 Utvikling og vedlikehold klimakost\General\Utslippsfaktorer\Kryssløpsanalyse\FIGARO data"
+# --- File paths and config (defaults below; can be overridden by the caller ---
+# --- when running this script via runpy.run_path(init_globals={...})). ---
+# When run directly, the defaults apply. When run from Household_EF.py (or any
+# other driver that injects globals), those injected values take precedence.
+DATA_DIR = globals().get(
+    "DATA_DIR",
+    r"C:\Users\marta.baltruszewicz\OneDrive - Asplan Viak\Documents\additional_projects\Canada_hh_energy\Data",
+)
+FIGARO_FOLDER = globals().get(
+    "FIGARO_FOLDER",
+    r"C:\Users\marta.baltruszewicz\OneDrive - Asplan Viak\Documents - 403001-01 Utvikling og vedlikehold klimakost\General\Utslippsfaktorer\Kryssløpsanalyse\FIGARO data",
+)
+COUNTRY_CODE = globals().get("COUNTRY_CODE", "CA")
+HH_CATEGORY = globals().get("HH_CATEGORY", "P3_S14")
+FD_CATEGORIES = globals().get(
+    "FD_CATEGORIES", ["P3_S13", "P3_S14", "P3_S15", "P51G", "P5M"]
+)
 
+# Derived paths (always relative to DATA_DIR).
 SAS_PATH = os.path.join(
     DATA_DIR,
     r"OneDrive_2026-03-09\Survey of Household Spending\SHS_EDM_2019\Data\SAS\pumf_shs2019.sas7bdat",
@@ -25,11 +40,6 @@ SAS_PATH = os.path.join(
 BRIDGE_PATH = os.path.join(DATA_DIR, "COICOP_to_FIGARO_Bridge.xlsx")
 IEA_PATH = os.path.join(DATA_DIR, "IEA_data.xlsx")
 NACE_IEA_PATH = os.path.join(DATA_DIR, "IEA_NACE_mapping.xlsx")
-
-# --- Country / household-category to analyse ---
-COUNTRY_CODE = "CA"          # country code in regions.iloc[:, 1]
-HH_CATEGORY = "P3_S14"       # household consumption final-demand category
-FD_CATEGORIES = ["P3_S13", "P3_S14", "P3_S15", "P51G", "P5M"]
 
 
 # %% Cell 1 — Load FIGARO economic IO data
@@ -178,14 +188,14 @@ print(f"hh_EF_NACE shape: {hh_EF_NACE.shape}, total = {hh_EF_NACE.sum():,.2f} TJ
 # Distribute the per-NACE energy footprint across COICOP categories using
 # RAS_nace_to_coicop_shares. Each row of the (62 x 75) shares matrix is
 # multiplied by the corresponding scalar from hh_EF_NACE.
-hh_EF_indir_COICOP = RAS_nace_to_coicop_shares.multiply(hh_EF_NACE, axis=0)
-print(f"hh_EF_indir_COICOP shape: {hh_EF_indir_COICOP.shape}, "
-      f"total = {hh_EF_indir_COICOP.values.sum():,.2f} TJ")
+EF_indir_COICOP = RAS_nace_to_coicop_shares.multiply(hh_EF_NACE, axis=0)
+print(f"EF_indir_COICOP shape: {EF_indir_COICOP.shape}, "
+      f"total = {EF_indir_COICOP.values.sum():,.2f} TJ")
 
 # Indirect Energy intensity per COICOP category:
-#   e_COICOP[j] = sum_i hh_EF_indir_COICOP[i, j]  /  sum_i RAS_NACE_COICOP_spends[i, j]
+#   e_COICOP[j] = sum_i EF_indir_COICOP[i, j]  /  sum_i RAS_NACE_COICOP_spends[i, j]
 #   units: TJ per million EUR
-e_COICOP_indir = hh_EF_indir_COICOP.sum(axis=0) / RAS_NACE_COICOP_spends.sum(axis=0)
+e_COICOP_indir = EF_indir_COICOP.sum(axis=0) / RAS_NACE_COICOP_spends.sum(axis=0)
 e_COICOP_indir.name = "e_COICOP_indir"
 print(f"e_COICOP_indir shape: {e_COICOP_indir.shape} (units: TJ / million EUR)")
 
@@ -235,18 +245,18 @@ print(e_COICOP_TJperMlnEur.head())
 
 # Energy footprint (TJ) per COICOP — same logic as above but with absolute
 # TJ values instead of intensities.
-#   hh_EF_indir = column sums of hh_EF_indir_COICOP (75 values, TJ)
-#   hh_EF_dir   = direct TJ values from dir_E_road_resid, matched to COICOP
+#   EF_indir_COICOP = column sums of EF_indir_COICOP (75 values, TJ)
+#   EF_dir_COICOP   = direct TJ values from dir_E_road_resid, matched to COICOP
 #                 codes; categories not in dir_E_road_resid get 0.
-hh_EF_dir_COICOP = pd.Series(
+EF_dir_COICOP = pd.Series(
     {str(row.iloc[1]).strip(): float(row.iloc[2]) for _, row in dir_E_road_resid.iterrows()},
-    name="hh_EF_dir",
+    name="EF_dir_COICOP",
 )
-E_COICOP_EF_TJ = pd.DataFrame({
-    "hh_EF_indir": hh_EF_indir_COICOP.sum(axis=0),
-    "hh_EF_dir":   hh_EF_dir_COICOP.reindex(hh_EF_indir_COICOP.columns, fill_value=0.0),
+EF_COICOP_TJ_indir_dir = pd.DataFrame({
+    "EF_indir_COICOP": EF_indir_COICOP.sum(axis=0),
+    "EF_dir_COICOP":   EF_dir_COICOP.reindex(EF_indir_COICOP.columns, fill_value=0.0),
 })
-print(f"\nE_COICOP_EF_TJ shape: {E_COICOP_EF_TJ.shape} (units: TJ)")
-print(E_COICOP_EF_TJ.head())
+print(f"\nEF_COICOP_TJ_indir_dir shape: {EF_COICOP_TJ_indir_dir.shape} (units: TJ)")
+print(EF_COICOP_TJ_indir_dir.head())
 
 # %%
