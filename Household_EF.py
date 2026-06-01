@@ -243,10 +243,37 @@ _inc_dec_by_caseid = pd.Series(
 )
 Unit_hh_cap["Inc_hh_dec"] = Unit_hh_cap["CaseID"].map(_inc_dec_by_caseid)
 
+# Per-OECD-capita income decile.
+# - Income variable: HH_TotInc / OECD_scale (equivalised income, $ per
+#   OECD-equivalent adult).
+# - Population weight: OECD_cap = WeightD * OECD_scale (number of
+#   equivalent adults represented).
+# Each decile then contains ~10% of OECD-equivalent adults rather than
+# ~10% of households.
+_uhc_by_id = Unit_hh_cap.set_index("CaseID")
+_caseid_arr = SHS_2019_raw["CaseID"].values
+_hh_totinc  = SHS_2019_raw["HH_TotInc"].values
+_oecd_scale = _uhc_by_id["OECD_scale"].reindex(_caseid_arr).values
+_oecd_cap   = _uhc_by_id["OECD_cap"].reindex(_caseid_arr).values
+
+_equiv_income = _hh_totinc / _oecd_scale
+
+_inc_oecd_dec_by_caseid = pd.Series(
+    _weighted_decile(_equiv_income, _oecd_cap, n=10),
+    index=_caseid_arr,
+    name="Inc_OECDcap_dec",
+)
+Unit_hh_cap["Inc_OECDcap_dec"] = Unit_hh_cap["CaseID"].map(_inc_oecd_dec_by_caseid)
+
 print("Inc_hh_dec distribution (count of survey rows per decile):")
 print(Unit_hh_cap["Inc_hh_dec"].value_counts().sort_index())
-print("Inc_hh_dec weighted population per decile:")
+print("Inc_hh_dec weighted-population per decile (WeightD totals):")
 print(Unit_hh_cap.groupby("Inc_hh_dec")["WeightD"].sum().round(0))
+
+print("\nInc_OECDcap_dec distribution (count of survey rows per decile):")
+print(Unit_hh_cap["Inc_OECDcap_dec"].value_counts().sort_index())
+print("Inc_OECDcap_dec OECD-equivalent-adults per decile (OECD_cap totals):")
+print(Unit_hh_cap.groupby("Inc_OECDcap_dec")["OECD_cap"].sum().round(0))
 
 # %% Cell 2 - COICOP aggregation matrices + level switch
 # Load two aggregation matrices from COICOP_to_FIGARO_Bridge.xlsx,
@@ -357,11 +384,11 @@ print(SHS_spend_shares.head())
 #       group. Computed as: SHS_spend_shares * EF_tot_aggr. The row value is
 #       the sum of EF for all population households the survey row represents.
 #
-#   EF_per_hh_TJ_xxCOICOP
+#   avg_EF_per_hh_TJ_xxCOICOP
 #       TJ per actual household = Total_EF_HHgrouped_TJ_xxCOICOP / WeightD
 #       (values from Unit_hh_cap, matched on CaseID).
 #
-#   EF_per_OECDcap_TJ_xxCOICOP
+#   avg_EF_per_OECDcap_TJ_xxCOICOP
 #       TJ per OECD-equivalent adult = Total_EF_HHgrouped_TJ_xxCOICOP / OECD_cap
 #       (values from Unit_hh_cap, matched on CaseID).
 #
@@ -388,13 +415,41 @@ _per_cap.insert(0, "CaseID", _total["CaseID"].values)
 
 # Expose under dynamic names that include the aggregation level.
 globals()[f"Total_EF_HHgrouped_TJ_{_n}COICOP"] = _total
-globals()[f"EF_per_hh_TJ_{_n}COICOP"]          = _per_hh
-globals()[f"EF_per_OECDcap_TJ_{_n}COICOP"]     = _per_cap
+globals()[f"avg_EF_per_hh_TJ_{_n}COICOP"]          = _per_hh
+globals()[f"avg_EF_per_OECDcap_TJ_{_n}COICOP"]     = _per_cap
+
+# Per-row totals across all COICOP categories — one value per survey household.
+#   Total_aggr_EF_hh_wght = total TJ for the WeightD households the row represents
+#                           (sum across COICOP of Total_EF_HHgrouped_TJ_xxCOICOP).
+#                           A sum, not an average. Population totals sum to the
+#                           national EF total.
+#   avg_EF_per_hh         = total TJ per actual household for that segment
+#                           (sum across COICOP of avg_EF_per_hh_TJ_xxCOICOP).
+#   avg_EF_perOECD_cap    = total TJ per OECD-equivalent adult for that segment
+#                           (sum across COICOP of avg_EF_per_OECDcap_TJ_xxCOICOP).
+Total_aggr_EF_hh_wght = pd.DataFrame({
+    "CaseID":                _total["CaseID"].values,
+    "Total_aggr_EF_hh_wght": _total.iloc[:, 1:].sum(axis=1).values,
+})
+avg_EF_per_hh = pd.DataFrame({
+    "CaseID":        _per_hh["CaseID"].values,
+    "avg_EF_per_hh": _per_hh.iloc[:, 1:].sum(axis=1).values,
+})
+avg_EF_perOECD_cap = pd.DataFrame({
+    "CaseID":             _per_cap["CaseID"].values,
+    "avg_EF_perOECD_cap": _per_cap.iloc[:, 1:].sum(axis=1).values,
+})
 
 print(f"Total_EF_HHgrouped_TJ_{_n}COICOP shape: {_total.shape}, "
       f"total = {_total.iloc[:, 1:].values.sum():,.2f} TJ")
-print(f"EF_per_hh_TJ_{_n}COICOP        shape: {_per_hh.shape}")
-print(f"EF_per_OECDcap_TJ_{_n}COICOP   shape: {_per_cap.shape}")
+print(f"avg_EF_per_hh_TJ_{_n}COICOP        shape: {_per_hh.shape}")
+print(f"avg_EF_per_OECDcap_TJ_{_n}COICOP   shape: {_per_cap.shape}")
+print(f"Total_aggr_EF_hh_wght          shape: {Total_aggr_EF_hh_wght.shape}, "
+      f"sum  = {Total_aggr_EF_hh_wght['Total_aggr_EF_hh_wght'].sum():,.2f} TJ")
+print(f"avg_EF_per_hh                  shape: {avg_EF_per_hh.shape}, "
+      f"mean = {avg_EF_per_hh['avg_EF_per_hh'].mean():.4f} TJ/hh")
+print(f"avg_EF_perOECD_cap             shape: {avg_EF_perOECD_cap.shape}, "
+      f"mean = {avg_EF_perOECD_cap['avg_EF_perOECD_cap'].mean():.4f} TJ/OECD-cap")
 
 if coicop_to_coicop_matching == 75:
     Dir_EF_hh_TJ   = _shares.mul(EF_COICOP_TJ_indir_dir["EF_dir_COICOP"],   axis=1)
@@ -443,14 +498,14 @@ def _add_hatching(ax, palette_size=len(_COLORBLIND_PALETTE), hatches=_CB_HATCHES
 _sum_OECD_cap = Unit_hh_cap["OECD_cap"].sum()
 _sum_WeightD  = Unit_hh_cap["WeightD"].sum()
 
-EF_per_OECD_cap = (EF_tot_aggr / _sum_OECD_cap).sort_values(ascending=False)
-EF_per_hh       = EF_tot_aggr.reindex(EF_per_OECD_cap.index) / _sum_WeightD
+avg_EF_weighted_OECDcap_per_COICOP = (EF_tot_aggr / _sum_OECD_cap).sort_values(ascending=False)
+avg_EF_weighted_hh_per_COICOP = EF_tot_aggr.reindex(avg_EF_weighted_OECDcap_per_COICOP.index) / _sum_WeightD
 
 print(f"sum(OECD_cap) = {_sum_OECD_cap:,.0f}")
 print(f"sum(WeightD)  = {_sum_WeightD:,.0f}")
 print(f"EF total: {EF_tot_aggr.sum():,.0f} TJ "
-      f"-> {EF_per_OECD_cap.sum():.3f} TJ/OECD-cap, "
-      f"{EF_per_hh.sum():.3f} TJ/hh")
+      f"-> {avg_EF_weighted_OECDcap_per_COICOP.sum():.3f} TJ/OECD-cap, "
+      f"{avg_EF_weighted_hh_per_COICOP.sum():.3f} TJ/hh")
 
 
 def _short(label, n=25):
@@ -459,8 +514,8 @@ def _short(label, n=25):
 
 
 plot_df = pd.DataFrame({
-    "Per OECD-cap": EF_per_OECD_cap,
-    "Per household": EF_per_hh,
+    "Per OECD-cap": avg_EF_weighted_OECDcap_per_COICOP,
+    "Per household": avg_EF_weighted_hh_per_COICOP,
 }).T
 plot_df.columns = [_short(c) for c in plot_df.columns]
 
@@ -545,7 +600,7 @@ _HHTYPE_NAMES = {
 }
 
 _n = coicop_to_coicop_matching
-_per_cap_df = globals()[f"EF_per_OECDcap_TJ_{_n}COICOP"]
+_per_cap_df = globals()[f"avg_EF_per_OECDcap_TJ_{_n}COICOP"]
 
 _meta_h = SHS_2019_raw[["CaseID", "HHType6"]].merge(
     Unit_hh_cap[["CaseID", "OECD_cap"]], on="CaseID", how="inner"
@@ -601,7 +656,7 @@ _RP_AGE_NAMES = {
     "06": "75+",
 }
 
-_per_cap_df = globals()[f"EF_per_OECDcap_TJ_{coicop_to_coicop_matching}COICOP"]
+_per_cap_df = globals()[f"avg_EF_per_OECDcap_TJ_{coicop_to_coicop_matching}COICOP"]
 
 _meta_a = SHS_2019_raw[["CaseID", "RP_AgeGrp"]].merge(
     Unit_hh_cap[["CaseID", "OECD_cap"]], on="CaseID", how="inner"
@@ -663,7 +718,7 @@ _VAR_SPECS = {
                     "Reference person education", True),
     "DwelTyp":     ({"1": "Single detached", "2": "Single attached", "3": "Apartment"},
                     "Dwelling type", False),
-    "Tenure":      ({"1": "Owner", "2": "Renter", "3": "Other"},
+    "Tenure":      ({"1": "Owner w/ mortgage", "2": "Owner w/o mortgage", "3": "Renter"},
                     "Tenure", False),
     "NumBedr":     ({"1": "1", "2": "2", "3": "3", "4": "4+", "9": "Not stated"},
                     "Number of bedrooms", True),
@@ -680,7 +735,7 @@ _VAR_SPECS = {
                      "Major household income source", False),
 }
 
-_per_cap_df = globals()[f"EF_per_OECDcap_TJ_{coicop_to_coicop_matching}COICOP"]
+_per_cap_df = globals()[f"avg_EF_per_OECDcap_TJ_{coicop_to_coicop_matching}COICOP"]
 _cat_cols = [c for c in _per_cap_df.columns if c != "CaseID"]
 
 
@@ -785,5 +840,166 @@ ax.legend(title="COICOP category", bbox_to_anchor=(1.02, 1), loc="upper left", f
 _add_hatching(ax)
 plt.tight_layout()
 plt.show()
+
+# %% Cell 11 - Stacked bar: average TJ per OECD-cap by per-OECD-cap income decile
+# Uses Inc_OECDcap_dec (built in Cell 1d) — deciles of equivalised income
+# (HH_TotInc / OECD_scale) weighted by OECD_cap. Each decile holds ~10% of
+# OECD-equivalent adults.
+# Aggregation:
+#   avg_TJ_per_cap[dec, c] = sum_h(Total_EF[h, c]) / sum_h(OECD_cap[h])
+# X-tick labels show the weighted-mean equivalised income per decile.
+
+_total_df = globals()[f"Total_EF_HHgrouped_TJ_{coicop_to_coicop_matching}COICOP"]
+_meta_o = Unit_hh_cap[["CaseID", "Inc_OECDcap_dec", "OECD_cap"]]
+_merged = _total_df.merge(_meta_o, on="CaseID", how="inner")
+_cat_cols = [c for c in _total_df.columns if c != "CaseID"]
+
+_grp = _merged.groupby("Inc_OECDcap_dec")
+EF_per_OECDcap_by_IncOECDDec = _grp[_cat_cols].sum().div(_grp["OECD_cap"].sum(), axis=0)
+
+# Sort COICOP columns by total contribution; keep deciles in numeric order.
+_col_order = EF_per_OECDcap_by_IncOECDDec.sum(axis=0).sort_values(ascending=False).index
+EF_per_OECDcap_by_IncOECDDec = EF_per_OECDcap_by_IncOECDDec[_col_order].sort_index()
+
+# Weighted-mean equivalised income (CAD per OECD-cap) per decile:
+#   mean_eq_inc[dec] = sum_h((HH_TotInc/OECD_scale) * OECD_cap) / sum_h(OECD_cap)
+_eq_inc_meta = pd.DataFrame({
+    "CaseID":    SHS_2019_raw["CaseID"].values,
+    "EqIncome":  SHS_2019_raw["HH_TotInc"].values / _oecd_scale,
+}).merge(Unit_hh_cap[["CaseID", "Inc_OECDcap_dec", "OECD_cap"]], on="CaseID", how="inner")
+
+mean_eq_inc_per_dec = (
+    (_eq_inc_meta["EqIncome"] * _eq_inc_meta["OECD_cap"])
+    .groupby(_eq_inc_meta["Inc_OECDcap_dec"]).sum()
+    .div(_eq_inc_meta.groupby("Inc_OECDcap_dec")["OECD_cap"].sum())
+).sort_index()
+
+EF_per_OECDcap_by_IncOECDDec.index = [
+    f"D{int(d)}\n${mean_eq_inc_per_dec.loc[d] / 1000:.0f}k"
+    for d in EF_per_OECDcap_by_IncOECDDec.index
+]
+
+print(f"EF_per_OECDcap_by_IncOECDDec shape: {EF_per_OECDcap_by_IncOECDDec.shape}")
+print("Weighted-mean equivalised income (CAD / OECD-cap) per decile:")
+print(mean_eq_inc_per_dec.round(0))
+print(EF_per_OECDcap_by_IncOECDDec.round(4))
+
+fig, ax = plt.subplots(figsize=(12, 7))
+EF_per_OECDcap_by_IncOECDDec.rename(columns=_short).plot.bar(
+    ax=ax, stacked=True, color=_COLORBLIND_PALETTE, edgecolor="white", linewidth=0.4
+)
+ax.set_title(f"Average EF per OECD-cap by per-OECD-cap income decile (COICOP-{coicop_to_coicop_matching})")
+ax.set_ylabel("TJ per OECD-cap")
+ax.set_xlabel("Per-OECD-cap income decile — weighted mean equivalised income shown below")
+ax.tick_params(axis="x", labelrotation=0)
+ax.grid(axis="y", linestyle="--", alpha=0.4)
+ax.legend(title="COICOP category", bbox_to_anchor=(1.02, 1), loc="upper left", fontsize=8)
+_add_hatching(ax)
+plt.tight_layout()
+plt.show()
+
+# %% Cell 12 - Assemble data for statistical analysis
+# Build a single DataFrame `var_for_stat_analysis` with one row per survey
+# household, joining everything needed for downstream regression / inequality
+# work. Save to disk so a separate notebook can `pd.read_pickle(...)` it
+# without re-running this script.
+
+_socio_vars = [
+    "Prov", "HHType6", "RP_AgeGrp",
+    "RP_Gender", "RP_MarStat", "RP_Educ",
+    "DwelTyp", "Tenure", "NumBedr",
+    "SecResYN", "OthPropYN", "InternetYN", "VehicleYN",
+    "HH_MajIncSrc", "HH_TotInc",
+]
+_existing_socio = [c for c in _socio_vars if c in SHS_2019_raw.columns]
+_missing_socio  = [c for c in _socio_vars if c not in SHS_2019_raw.columns]
+if _missing_socio:
+    print(f"Note: missing in SHS_2019_raw, skipped: {_missing_socio}")
+
+# 1. Start with Unit_hh_cap (CaseID, WeightD, OECD_scale, OECD_cap, deciles)
+var_for_stat_analysis = Unit_hh_cap.copy()
+
+# 2. Join socio-demographic + income vars from SHS_2019_raw
+var_for_stat_analysis = var_for_stat_analysis.merge(
+    SHS_2019_raw[["CaseID"] + _existing_socio], on="CaseID", how="left"
+)
+
+# 3. Join EF row-totals (each is CaseID + one column)
+var_for_stat_analysis = var_for_stat_analysis.merge(Total_aggr_EF_hh_wght, on="CaseID", how="left")
+var_for_stat_analysis = var_for_stat_analysis.merge(avg_EF_per_hh,         on="CaseID", how="left")
+var_for_stat_analysis = var_for_stat_analysis.merge(avg_EF_perOECD_cap,    on="CaseID", how="left")
+
+# 4. Join per-COICOP per-hh and per-OECD-cap tables, prefixing column names
+#    so per-hh and per-cap variants of the same COICOP don't collide. Each
+#    COICOP label is also converted into a safe Python identifier so the
+#    columns work with statsmodels.formula and similar tools.
+import re
+
+
+def _sanitize_colname(s, prefix="C", max_len=50):
+    """Convert a COICOP-like label into a safe Python identifier."""
+    s = str(s).strip()
+    s = re.sub(r"[^A-Za-z0-9_]+", "_", s)
+    s = re.sub(r"_+", "_", s).strip("_")
+    if s and s[0].isdigit():
+        s = f"{prefix}_{s}"
+    return (s[:max_len] or prefix).rstrip("_")
+
+
+_per_hh  = globals()[f"avg_EF_per_hh_TJ_{coicop_to_coicop_matching}COICOP"].copy()
+_per_cap = globals()[f"avg_EF_per_OECDcap_TJ_{coicop_to_coicop_matching}COICOP"].copy()
+
+# Build sanitized column names + a label map (sanitized → original).
+_orig_labels = list(_per_hh.columns[1:])
+_safe_labels = [_sanitize_colname(c) for c in _orig_labels]
+if len(set(_safe_labels)) != len(_safe_labels):
+    # Disambiguate any duplicates by appending a suffix.
+    seen = {}
+    deduped = []
+    for s in _safe_labels:
+        n = seen.get(s, 0)
+        seen[s] = n + 1
+        deduped.append(s if n == 0 else f"{s}_{n}")
+    _safe_labels = deduped
+
+coicop_label_map = {}
+_hh_cols, _cap_cols = [], []
+for orig, safe in zip(_orig_labels, _safe_labels):
+    hh_name  = f"avg_EF_per_hh__{safe}"
+    cap_name = f"avg_EF_per_cap__{safe}"
+    _hh_cols.append(hh_name)
+    _cap_cols.append(cap_name)
+    coicop_label_map[hh_name]  = orig
+    coicop_label_map[cap_name] = orig
+
+_per_hh.columns  = ["CaseID"] + _hh_cols
+_per_cap.columns = ["CaseID"] + _cap_cols
+var_for_stat_analysis = var_for_stat_analysis.merge(_per_hh,  on="CaseID", how="left")
+var_for_stat_analysis = var_for_stat_analysis.merge(_per_cap, on="CaseID", how="left")
+
+print(f"var_for_stat_analysis shape: {var_for_stat_analysis.shape}")
+print(f"Columns ({len(var_for_stat_analysis.columns)}):")
+for c in var_for_stat_analysis.columns:
+    print(f"  {c}")
+
+# Save to pickle (preserves dtypes; fast to load in another notebook).
+# Filename includes the COICOP level so different aggregations don't clash.
+# Also save a JSON sidecar mapping sanitized column → original COICOP label.
+_OUT_PATH = os.path.join(
+    _HERE, f"var_for_stat_analysis_{coicop_to_coicop_matching}COICOP.pkl"
+)
+_MAP_PATH = os.path.join(
+    _HERE, f"var_for_stat_analysis_{coicop_to_coicop_matching}COICOP_labels.json"
+)
+var_for_stat_analysis.to_pickle(_OUT_PATH)
+with open(_MAP_PATH, "w", encoding="utf-8") as f:
+    json.dump(coicop_label_map, f, indent=2, ensure_ascii=False)
+
+print(f"\nSaved data:   {_OUT_PATH}")
+print(f"Saved labels: {_MAP_PATH}")
+print("To load in another notebook:")
+print(f'  import pandas as pd, json')
+print(f'  df  = pd.read_pickle(r"{_OUT_PATH}")')
+print(f'  lbl = json.load(open(r"{_MAP_PATH}", encoding="utf-8"))  # safe_col -> original COICOP label')
 
 # %%
