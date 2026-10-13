@@ -1,7 +1,7 @@
 """
 NACE-to-COICOP bridge matrix loader.
 
-Loads the many-to-many bridge matrix from the COICOP_to_FIGARO_Bridge.xlsx
+Loads the many-to-many bridge matrix from the COICOP_to_FIGARO_Bridge_2019.xlsx
 file and optionally validates it against `sectors` and the SHS DataFrame.
 
 Example usage from another script:
@@ -9,7 +9,7 @@ Example usage from another script:
     from NACE_COICOP_mask import nace_to_coicop_mask
 
     NACE_to_COICOP_mask = nace_to_coicop_mask(
-        bridge_path=r"C:\\path\\to\\COICOP_to_FIGARO_Bridge.xlsx",
+        bridge_path=r"C:\\path\\to\\COICOP_to_FIGARO_Bridge_2019.xlsx",
         sectors=meta.sectors,        # optional: enables sector-order check
         shs_data=SHS_2019_data,      # optional: enables COICOP-name check
     )
@@ -32,7 +32,7 @@ def nace_to_coicop_mask(bridge_path, sectors=None, shs_data=None):
     Parameters
     ----------
     bridge_path : str
-        Full path to COICOP_to_FIGARO_Bridge.xlsx.
+        Full path to COICOP_to_FIGARO_Bridge_2019.xlsx.
     sectors : pd.DataFrame, optional
         If provided, checks that column 0 of the mask matches `sectors.iloc[:, 1]`
         in the same order.
@@ -96,7 +96,7 @@ def nace_to_coicop_mask(bridge_path, sectors=None, shs_data=None):
 def load_coicop_aggregation_masks(bridge_path):
     """
     Load the four COICOP-aggregation masks from tab "COICOP_to_COICOPaggr"
-    in COICOP_to_FIGARO_Bridge.xlsx.
+    in COICOP_to_FIGARO_Bridge_2019.xlsx.
 
     Ranges:
         COICOP75_to_COICOP32  : D25:BZ56  (32 x 75)  - aggregates 75 -> 32
@@ -109,7 +109,7 @@ def load_coicop_aggregation_masks(bridge_path):
     Parameters
     ----------
     bridge_path : str
-        Full path to COICOP_to_FIGARO_Bridge.xlsx.
+        Full path to COICOP_to_FIGARO_Bridge_2019.xlsx.
 
     Returns
     -------
@@ -157,7 +157,7 @@ def load_coicop_aggregation_masks(bridge_path):
 # Standalone usage — only runs when this file is executed directly.
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
-    BRIDGE_PATH = r"C:\Users\marta.baltruszewicz\OneDrive - Asplan Viak\Documents\additional_projects\Canada_hh_energy\Data\COICOP_to_FIGARO_Bridge.xlsx"
+    BRIDGE_PATH = r"C:\Users\marta.baltruszewicz\OneDrive - Asplan Viak\Documents\additional_projects\Canada_hh_energy\Data\COICOP_to_FIGARO_Bridge_2019.xlsx"
 
     NACE_to_COICOP_mask = nace_to_coicop_mask(bridge_path=BRIDGE_PATH)
     print(NACE_to_COICOP_mask.head())

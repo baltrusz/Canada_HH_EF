@@ -276,7 +276,7 @@ print("Inc_OECDcap_dec OECD-equivalent-adults per decile (OECD_cap totals):")
 print(Unit_hh_cap.groupby("Inc_OECDcap_dec")["OECD_cap"].sum().round(0))
 
 # %% Cell 2 - COICOP aggregation matrices + level switch
-# Load two aggregation matrices from COICOP_to_FIGARO_Bridge.xlsx,
+# Load two aggregation matrices from COICOP_to_FIGARO_Bridge_2019.xlsx,
 # tab "COICOP_to_COICOPaggr":
 #   COICOP75_to_COICOP32 : D25:BZ56 (32 x 75), row labels in C25:C56,
 #                          column labels (COICOP75) in D8:BZ8.
@@ -286,7 +286,7 @@ print(Unit_hh_cap.groupby("Inc_OECDcap_dec")["OECD_cap"].sum().round(0))
 # - 75: no aggregation, work with the original 75-COICOP categories.
 # - 32 or 12: aggregate both SHS spends and the EF total column.
 
-_BRIDGE_PATH = os.path.join(DATA_DIR, "COICOP_to_FIGARO_Bridge.xlsx")
+_BRIDGE_PATH = os.path.join(DATA_DIR, "COICOP_to_FIGARO_Bridge_2019.xlsx")
 _BRIDGE_SHEET = "COICOP_to_COICOPaggr"
 
 

@@ -244,7 +244,7 @@ print(Unit_hh_cap["OECD_scale"].value_counts().sort_index().head(10))"""))
 
 cells.append(md("""## Cell 2 — COICOP aggregation matrices + level switch
 
-Loads two aggregation matrices from `COICOP_to_FIGARO_Bridge.xlsx` / tab `COICOP_to_COICOPaggr`:
+Loads two aggregation matrices from `COICOP_to_FIGARO_Bridge_2019.xlsx` / tab `COICOP_to_COICOPaggr`:
 
 - **`COICOP75_to_COICOP32`** — 32×75 (D25:BZ56, labels in C25:C56).
 - **`COICOP75_to_COICOP12`** — 12×75 (D59:BZ70, labels in C59:C70).
@@ -253,7 +253,7 @@ Both share column headers from D8:BZ8 (the 75 detailed COICOP codes).
 
 Set **`coicop_to_coicop_matching`** to `75` (no aggregation), `32`, or `12`. The switch aggregates both `SHS_2019_data_Mln_EUR_WGHT` and the total EF column into `SHS_aggr` and `EF_tot_aggr`."""))
 
-cells.append(code("""_BRIDGE_PATH = os.path.join(DATA_DIR, "COICOP_to_FIGARO_Bridge.xlsx")
+cells.append(code("""_BRIDGE_PATH = os.path.join(DATA_DIR, "COICOP_to_FIGARO_Bridge_2019.xlsx")
 _BRIDGE_SHEET = "COICOP_to_COICOPaggr"
 
 

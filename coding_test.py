@@ -21,7 +21,7 @@ sum_exp.to_frame().to_clipboard()
 df.describe()
 
 # %%
-# Columns to multiply by WeightID: check with COICOP_to_FIGARO_Bridge.xlsx in tab
+# Columns to multiply by WeightID: check with COICOP_to_FIGARO_Bridge_2019.xlsx in tab
 #COICOP_to_FIGARO_Bridge row 8
 cols = [
     'FD003', 'FD990', 'SH003', 'SH011',	'SH082', 'SH991', 'SH015', 'SH016',

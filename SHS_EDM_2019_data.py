@@ -60,7 +60,7 @@ def shs_2019_data(sas_path, exchange_rate=1.49):
     # Load the SAS file
     df = pd.read_sas(sas_path, format="sas7bdat", encoding="latin1")
 
-    # Expenditure columns to weight (see COICOP_to_FIGARO_Bridge.xlsx, tab
+    # Expenditure columns to weight (see COICOP_to_FIGARO_Bridge_2019.xlsx, tab
     # COICOP_to_FIGARO_Bridge, row 8)
     cols = [
         'FD003', 'FD990', 'SH003', 'SH011', 'SH082', 'SH991', 'SH015', 'SH016',

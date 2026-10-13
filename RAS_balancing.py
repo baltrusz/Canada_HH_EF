@@ -374,7 +374,7 @@ if __name__ == "__main__":
     ]
 
     NACE_to_COICOP_mask = nace_to_coicop_mask(
-        bridge_path=r"C:\Users\marta.baltruszewicz\OneDrive - Asplan Viak\Documents\additional_projects\Canada_hh_energy\Data\COICOP_to_FIGARO_Bridge.xlsx",
+        bridge_path=r"C:\Users\marta.baltruszewicz\OneDrive - Asplan Viak\Documents\additional_projects\Canada_hh_energy\Data\COICOP_to_FIGARO_Bridge_2019.xlsx",
         sectors=figaro_result["meta"].sectors,
         shs_data=SHS_2019_data_Mln_EUR_WGHT,
     )

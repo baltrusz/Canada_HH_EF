@@ -37,8 +37,8 @@ SAS_PATH = os.path.join(
     DATA_DIR,
     r"OneDrive_2026-03-09\Survey of Household Spending\SHS_EDM_2019\Data\SAS\pumf_shs2019.sas7bdat",
 )
-BRIDGE_PATH = os.path.join(DATA_DIR, "COICOP_to_FIGARO_Bridge.xlsx")
-IEA_PATH = os.path.join(DATA_DIR, "IEA_data.xlsx")
+BRIDGE_PATH = os.path.join(DATA_DIR, "COICOP_to_FIGARO_Bridge_2019.xlsx")
+IEA_PATH = os.path.join(DATA_DIR, "IEA_data_2019.xlsx")
 NACE_IEA_PATH = os.path.join(DATA_DIR, "IEA_NACE_mapping.xlsx")
 
 
@@ -71,7 +71,7 @@ FDcategories = meta.FDcategories
 Y_hh = result[f"{COUNTRY_CODE}_Y_hh"]
 
 
-# %% Cell 2 — Load IEA energy data (3 different views, all from IEA_data.xlsx)
+# %% Cell 2 — Load IEA energy data (3 different views, all from IEA_data_2019.xlsx)
 
 # IEA_FC_tot: total final consumption.
 # Includes road indirect and international bunkers.
@@ -201,7 +201,7 @@ print(f"e_COICOP_indir shape: {e_COICOP_indir.shape} (units: TJ / million EUR)")
 
 
 # %% Cell 9 — Direct energy intensity per COICOP
-# Import direct energy values per COICOP from IEA_data.xlsx,
+# Import direct energy values per COICOP from IEA_data_2019.xlsx,
 # tab "Resid_Road_split_to_COICOP", cells A28:C33.
 # Row 28 is the header; rows 29-33 are 5 data rows.
 # Layout: column A = description, column B = COICOP code, column C = value (TJ).
