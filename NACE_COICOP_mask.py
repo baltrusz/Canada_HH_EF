@@ -19,11 +19,14 @@ Example usage from another script:
 import pandas as pd
 
 
-def nace_to_coicop_mask(bridge_path, sectors=None, shs_data=None):
+def nace_to_coicop_mask(bridge_path, sectors=None, shs_data=None,
+                        sheet_name="COICOP_to_FIGARO_Bridge", last_col="BZ"):
     """
     Load the NACE-to-COICOP bridge matrix from `bridge_path`.
 
-    The matrix is read from tab "COICOP_to_FIGARO_Bridge", range B8:BZ70.
+    The matrix is read from tab `sheet_name`, range B8:<last_col>70
+    (2019 defaults: "COICOP_to_FIGARO_Bridge", B8:BZ70; the per-year values
+    are in year_config.YEAR_CONFIG).
     Layout:
         column 0  = sector codes (NACE)
         column 1  = "FIGARO sector name / COICOP CODE -->" label
@@ -40,19 +43,23 @@ def nace_to_coicop_mask(bridge_path, sectors=None, shs_data=None):
         If provided, checks that the mask's COICOP column names (columns 2+)
         match the SHS column names with the "_wght" suffix stripped
         (excluding CaseID and WeightD).
+    sheet_name : str
+        Bridge tab name (differs per year, see year_config).
+    last_col : str
+        Last COICOP column letter ("BZ" for 75 codes, "CB" for 77 in 2017).
 
     Returns
     -------
     pd.DataFrame
-        62 × 77 bridge matrix.
+        62 × (2 + n_COICOP) bridge matrix (62 × 77 for 2019).
     """
     mask = pd.read_excel(
         bridge_path,
-        sheet_name="COICOP_to_FIGARO_Bridge",
+        sheet_name=sheet_name,
         header=0,           # row 8 contains column names
         skiprows=7,         # skip rows 1-7, so row 8 becomes the header
         nrows=62,           # rows 9 to 70 inclusive = 62 data rows
-        usecols="B:BZ",     # columns B through BZ = 77 columns
+        usecols=f"B:{last_col}",  # B:BZ = 77 columns for 2019
     )
     print(f"NACE_to_COICOP_mask shape: {mask.shape}")
 
