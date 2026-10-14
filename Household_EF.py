@@ -165,21 +165,26 @@ for y in YEARS:
 #     5 Lone parent, no additional persons                  -> 1 adult + (HHSize-1) kids
 #     6 Other household with related or unrelated persons   -> heterogeneous
 #   HHSize   : total persons, capped at 4 (= "4 or more").
-#   P0TO4YN, P5TO15YN : 1/0 flags for children present (under 15).
+#   P0to4YN, P5to15YN : child-presence flags, coded "1" = yes, "2" = no.
+#                       2017 has P5to17YN (ages 5-17) instead of P5to15YN.
 #
 # Notes:
 # - Because HHSize is capped at 4, kid counts inferred for types 3 and 5 are
 #   lower bounds (max 2 kids for couples-with-kids, max 3 for lone parents).
 # - For ambiguous types (4 and 6) we use the child-presence indicators
-#   (P0TO4YN, P5TO15YN) to flag whether to count at least one extra as a
+#   (P0to4YN, P5to15YN / P5to17YN) to flag whether to count at least one extra as a
 #   child; remaining extras count as adults.
+
+# Child-presence flags (whichever exist in the year's file; values "1" = yes).
+_CHILD_FLAGS = ("P0to4YN", "P5to15YN", "P5to17YN")
+
 
 def _oecd_scale_row(row):
     hht, hhs = row["HHType6"], row["HHSize"]
     if pd.isna(hht) or pd.isna(hhs):
         return float("nan")
     hht, hhs = int(hht), int(hhs)
-    has_kid = (row.get("P0TO4YN") == 1) or (row.get("P5TO15YN") == 1)
+    has_kid = any(str(row.get(c)).strip() == "1" for c in _CHILD_FLAGS)
 
     if hht == 1:
         n_adults, n_kids = 1, 0
@@ -353,6 +358,10 @@ for y in YEARS:
 
 # === Switch: 75 (no aggregation), 32, or 12 ===
 coicop_to_coicop_matching = 12
+
+if coicop_to_coicop_matching == 75 and len(YEARS) > 1:
+    print("Note: at the 75 level each year has its own SHS codes; compare years "
+          "at the 32 or 12 level.")
 
 if coicop_to_coicop_matching not in (75, 32, 12):
     raise ValueError(
@@ -757,8 +766,9 @@ _VAR_SPECS = {
                     "Has internet at home", False),
     "VehicleYN":   ({"1": "Yes", "2": "No"},
                     "Has vehicle", False),
-    "HH_MajIncSrc": ({"1": "Wages/salaries", "2": "Self-employment",
-                      "3": "Investment/pension", "4": "Govt transfers"},
+    "HH_MajIncSrc": ({"1": "Employment income", "2": "Investment income",
+                      "3": "Govt transfers", "4": "Other income",
+                      "5": "All sources <= 0"},   # StatCan PUMF codes; 5 only in 2021
                      "Major household income source", False),
 }
 
