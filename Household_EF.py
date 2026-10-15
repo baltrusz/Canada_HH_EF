@@ -997,8 +997,39 @@ var_for_stat_analysis.to_pickle(_OUT_PATH)
 with open(_MAP_PATH, "w", encoding="utf-8") as f:
     json.dump(coicop_label_map, f, indent=2, ensure_ascii=False)
 
+# Category totals per year (population totals, not per household): SHS
+# spending in nominal CAD and million EUR, energy footprint in TJ, and the
+# number of households and OECD adult equivalents. Used by
+# Statistical_analysis_all_years to split each category's change into a
+# spending part and an energy-intensity part.
+_tot_rows = []
+for y in YEARS:
+    _M = {32: COICOP_to_COICOP32, 12: COICOP_to_COICOP12}.get(coicop_to_coicop_matching)
+    _cad = SHS_data_CAD_WGHT[y].iloc[:, 2:].sum(axis=0)
+    _cad.index = [c[:-len("_wght")] if c.endswith("_wght") else c for c in _cad.index]
+    if _M is not None:
+        _cad = _M[y][_cad.index] @ _cad
+    _eur = SHS_aggr[y].iloc[:, 2:].sum(axis=0)
+    _eur.index = [c[:-len("_wght")] if c.endswith("_wght") else c for c in _eur.index]
+    _ef = EF_tot_aggr[y]
+    _safe = _safe_labels_for(list(_ef.index))
+    for lab, safe in zip(_ef.index, _safe):
+        _tot_rows.append({
+            "year": y, "category": lab, "safe_name": safe,
+            "spend_CAD": float(_cad[lab]), "spend_MlnEUR": float(_eur[lab]),
+            "EF_TJ": float(_ef[lab]),
+            "n_households": float(Unit_hh_cap[y]["WeightD"].sum()),
+            "n_OECD_cap": float(Unit_hh_cap[y]["OECD_cap"].sum()),
+        })
+category_totals = pd.DataFrame(_tot_rows)
+_TOT_PATH = os.path.join(
+    _HERE, f"var_for_stat_analysis_{coicop_to_coicop_matching}COICOP_category_totals.csv"
+)
+category_totals.to_csv(_TOT_PATH, index=False)
+
 print(f"\nSaved data:   {_OUT_PATH}")
 print(f"Saved labels: {_MAP_PATH}")
+print(f"Saved category totals: {_TOT_PATH}")
 print("To load in another notebook:")
 print(f'  import pandas as pd, json')
 print(f'  df  = pd.read_pickle(r"{_OUT_PATH}")')

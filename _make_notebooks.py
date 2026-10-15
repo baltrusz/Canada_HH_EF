@@ -4,7 +4,9 @@ Generate Energy_Model.ipynb and Household_EF.ipynb from their .py scripts
 
 The .py files are the source of truth. Each `# %% <title>` marker starts a
 new cell: the title becomes a markdown heading and the code below it a code
-cell. The module docstring becomes the notebook's intro text.
+cell. A `# %% [markdown]` marker makes a markdown cell from the comment lines
+below it (leading "# " removed). The module docstring becomes the notebook's
+intro text.
 
 Run after editing either script:
 
@@ -19,6 +21,8 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 SCRIPTS = {
     "Energy_Model.py": ("Energy_Model.ipynb", "Energy Model"),
     "Household_EF.py": ("Household_EF.ipynb", "Household Energy Footprint"),
+    "Statistical_analysis_all_years.py": ("Statistical_analysis_all_years.ipynb",
+                                          "Statistical Analysis — All Years"),
 }
 
 
@@ -71,6 +75,10 @@ def py_to_cells(path, title):
 
     for header, body in chunks:
         body_text = "\n".join(body).strip("\n")
+        if header == "[markdown]":
+            lines = [ln[2:] if ln.startswith("# ") else ln.lstrip("#") for ln in body_text.split("\n")]
+            cells.append(md("\n".join(lines)))
+            continue
         if header:
             cells.append(md(f"## {header}"))
         if body_text.strip():

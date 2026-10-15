@@ -42,6 +42,9 @@ YEAR_CONFIG = {
         "last_col": "CB",           # 77 COICOP columns, D:CB
         "iea_file": "IEA_data_2017.xlsx",
         "exchange_rate": 1.4647,    # CAD per EUR, ECB 2017 (bridge sheet SHS_PUMF_2017!R5)
+        # 1000 bootstrap weights for the Diary file (fixed-width text, 12 chars per weight).
+        "bsw_path": _SHS_ROOT + r"\SHS_EDM_2017\Data - Données\TXT\pumf_shs2017_diary_bsw_flatfile.txt",
+        "bsw_format": "txt",
     },
     2019: {
         "shs_path": _SHS_ROOT + r"\SHS_EDM_2019\Data\SAS\pumf_shs2019.sas7bdat",
@@ -52,6 +55,8 @@ YEAR_CONFIG = {
         "last_col": "BZ",           # 75 COICOP columns, D:BZ
         "iea_file": "IEA_data_2019.xlsx",
         "exchange_rate": 1.49,      # CAD per EUR, as in the original 2019 model
+        "bsw_path": _SHS_ROOT + r"\SHS_EDM_2019\Data\SAS\pumf_shs2019_bsw.sas7bdat",
+        "bsw_format": "sas",
     },
     2021: {
         "shs_path": _SHS_ROOT + r"\SHS_EDM_2021\RY2021\Data\SAS\pumf_shs2021.sas7bdat",
@@ -62,6 +67,8 @@ YEAR_CONFIG = {
         "last_col": "BZ",           # 75 COICOP columns, D:BZ (different set than 2019)
         "iea_file": "IEA_data_2021.xlsx",
         "exchange_rate": 1.4826,    # CAD per EUR (bridge sheet SHS_PUMF_2021!O5)
+        "bsw_path": _SHS_ROOT + r"\SHS_EDM_2021\RY2021\Data\SAS\pumf_2021_final_bsw.sas7bdat",
+        "bsw_format": "sas",
     },
 }
 
@@ -169,3 +176,41 @@ def bridge_coicop_codes(data_dir, year):
         nrows=1,
     )
     return row.iloc[0].astype(str).str.strip().tolist()
+
+
+def load_bsw(data_dir, year, n_boot=None):
+    """
+    Statistics Canada bootstrap weights for `year` (1000 replicates per
+    household). Returns a DataFrame indexed by CaseID (6-digit string) with
+    columns BSW1..BSW<n_boot>. Each column is a full set of household weights,
+    on the same scale as WeightD.
+    """
+    cfg = YEAR_CONFIG[year]
+    path = path_for(data_dir, year, "bsw_path")
+    if not os.path.exists(path):
+        path = path.replace("\\", os.sep)
+    if cfg["bsw_format"] == "sas":
+        df = pd.read_sas(path, format="sas7bdat", encoding="latin1")
+        df = df.rename(columns={"caseid": "CaseID"})
+        df["CaseID"] = df["CaseID"].astype(str).str.strip().str.zfill(6)
+        df = df.set_index("CaseID")
+    else:
+        # Fixed width: CaseID in chars 1-6, then 12 chars per weight. Each
+        # record is wrapped over two physical lines, so join the text first.
+        with open(path, "rb") as f:
+            text = f.read().decode("latin1").replace("\r", "")
+        lines = [ln for ln in text.split("\n") if ln.strip()]
+        records, cur = [], ""
+        for ln in lines:
+            cur += ln
+            if len(cur) >= 6 + 12 * 1000:
+                records.append(cur)
+                cur = ""
+        ids = [r[:6] for r in records]
+        vals = [[float(r[6 + 12 * i: 18 + 12 * i]) for i in range(1000)] for r in records]
+        df = pd.DataFrame(vals, index=pd.Index(ids, name="CaseID"),
+                          columns=[f"BSW{i}" for i in range(1, 1001)])
+    cols = [f"BSW{i}" for i in range(1, 1001)]
+    if n_boot is not None:
+        cols = cols[:n_boot]
+    return df[cols].astype(float)
