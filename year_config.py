@@ -27,7 +27,7 @@ import pandas as pd
 AVAILABLE_YEARS = [2017, 2019, 2021]
 
 # Relative to DATA_DIR. Windows-style separators to match the rest of the code.
-_SHS_ROOT = r"OneDrive_2026-03-09\Survey of Household Spending"
+_SHS_ROOT = r"Survey of Household Spending"
 
 YEAR_CONFIG = {
     2017: {
