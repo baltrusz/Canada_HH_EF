@@ -1,13 +1,15 @@
 """
-Per-year configuration for the multi-year Energy Model (2017, 2019, 2021).
+Per-year configuration for the multi-year Energy Model (2017, 2019, 2021, 2023).
 
 Everything that differs between survey years lives here, so Energy_Model.py
 and Household_EF.py can loop over any subset of YEARS without year-specific
 code:
 
-  - which SHS microdata file to read (2017 = Diary CSV, 2019/2021 = SAS),
+  - which SHS microdata file to read (2017 = Diary CSV, 2019/2021/2023 = SAS),
   - the COICOP_to_FIGARO_Bridge_<year>.xlsx file, its sheet names and last
-    COICOP column (2017 has 77 SHS codes -> D:CB, 2019/2021 have 75 -> D:BZ),
+    COICOP column (2017: 77 SHS codes -> D:CB, 2019: 75 -> D:BZ,
+    2021: 76 -> D:CA, 2023: 77 -> D:CB). The column after the last code is
+    the "check (primary)" column, which must stay outside the range,
   - the IEA_data_<year>.xlsx file,
   - the CAD -> EUR exchange rate,
   - renames of SHS socio-demographic variables back to the 2019 names.
@@ -17,14 +19,14 @@ Example usage:
     from year_config import YEAR_CONFIG, load_shs_raw, bridge_coicop_codes
 
     raw_2021 = load_shs_raw(DATA_DIR, 2021)          # 2019-style column names
-    codes_2021 = bridge_coicop_codes(DATA_DIR, 2021)  # 75 SHS codes, bridge order
+    codes_2021 = bridge_coicop_codes(DATA_DIR, 2021)  # 76 SHS codes, bridge order
 """
 
 # %%
 import os
 import pandas as pd
 
-AVAILABLE_YEARS = [2017, 2019, 2021]
+AVAILABLE_YEARS = [2017, 2019, 2021, 2023]
 
 # Relative to DATA_DIR. Windows-style separators to match the rest of the code.
 _SHS_ROOT = r"Survey of Household Spending"
@@ -64,10 +66,24 @@ YEAR_CONFIG = {
         "bridge_file": "COICOP_to_FIGARO_Bridge_2021.xlsx",
         "bridge_sheet": "COICOP_to_FIGARO_Bridge_2021",
         "aggr_sheet": "COICOP_to_COICOPaggr",
-        "last_col": "BZ",           # 75 COICOP columns, D:BZ (different set than 2019)
+        # 76 COICOP columns, D:CA (the bridge updated in Nov 2026 replaced
+        # RV001 with RV020 + RV010; before that it was 75 columns, D:BZ).
+        "last_col": "CA",
         "iea_file": "IEA_data_2021.xlsx",
         "exchange_rate": 1.4826,    # CAD per EUR (bridge sheet SHS_PUMF_2021!O5)
         "bsw_path": _SHS_ROOT + r"\SHS_EDM_2021\RY2021\Data\SAS\pumf_2021_final_bsw.sas7bdat",
+        "bsw_format": "sas",
+    },
+    2023: {
+        "shs_path": _SHS_ROOT + r"\SHS_EDM_2023\RY2023\Data\SAS\pumf_shs2023.sas7bdat",
+        "shs_format": "sas",
+        "bridge_file": "COICOP_to_FIGARO_Bridge_2023.xlsx",
+        "bridge_sheet": "COICOP_to_FIGARO_Bridge_2023",
+        "aggr_sheet": "COICOP_to_COICOPaggr",
+        "last_col": "CB",           # 77 COICOP columns, D:CB
+        "iea_file": "IEA_data_2023.xlsx",
+        "exchange_rate": 1.4595,    # CAD per EUR (bridge sheet SHS_PUMF_2023!O5)
+        "bsw_path": _SHS_ROOT + r"\SHS_EDM_2023\RY2023\Data\SAS\pumf_2023_final_bsw.sas7bdat",
         "bsw_format": "sas",
     },
 }
@@ -92,6 +108,8 @@ SOCIO_RENAME = {
         "HHTOTINC": "HH_TotInc",
     },
 }
+# 2023 uses the same variable names as 2021.
+SOCIO_RENAME[2023] = dict(SOCIO_RENAME[2021])
 
 # Categorical socio-demographic columns stored as strings in the 2019 PUMF.
 _CATEGORICAL = [

@@ -2,7 +2,7 @@
 Energy Model — main script.
 
 Define all file paths and imports once in the Setup cell, choose the survey
-years in YEARS (any one, two or all three of 2017, 2019, 2021), then run the
+years in YEARS (any subset of 2017, 2019, 2021, 2023), then run the
 numbered cells in order with Ctrl+Enter.
 
 The model itself (Cells 1-10 of the original single-year script) lives in
@@ -47,7 +47,7 @@ FD_CATEGORIES = globals().get(
     "FD_CATEGORIES", ["P3_S13", "P3_S14", "P3_S15", "P51G", "P5M"]
 )
 
-# === Years to run: any subset of [2017, 2019, 2021] ===
+# === Years to run: any subset of [2017, 2019, 2021, 2023] ===
 # (Household_EF.py passes its own list via _YEARS_OVERRIDE; a separate name is
 # used so that editing the list below always takes effect in an open console.)
 YEARS = check_years(globals().get("_YEARS_OVERRIDE") or [2017, 2019, 2021])
@@ -141,7 +141,7 @@ def energy_model_year(year):
     #                    year's exchange rate (YEAR_CONFIG[year]["exchange_rate"]),
     #                    i.e. CAD value ÷ rate ÷ 1,000,000.
     # Each row is one household; columns are CaseID, WeightD, then the
-    # expenditures listed in the year's bridge (75 for 2019/2021, 77 for 2017).
+    # expenditures listed in the year's bridge (75 for 2019, 76 for 2021, 77 for 2017/2023).
     shs_dict = shs_data(data_dir=DATA_DIR, year=year)
     SHS_data_CAD_WGHT     = shs_dict["CAD_WGHT"]
     SHS_data_Mln_EUR_WGHT = shs_dict["Mln_EUR_WGHT"]

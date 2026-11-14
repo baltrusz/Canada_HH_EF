@@ -1,7 +1,7 @@
 """
 Household_EF - household energy footprint downstream of Energy_Model.
 
-Runs Energy_Model.py for the chosen YEARS (any of 2017, 2019, 2021) and
+Runs Energy_Model.py for the chosen YEARS (any of 2017, 2019, 2021, 2023) and
 caches its outputs to one pickle per year. On subsequent runs, if none of
 the source files have changed, the cache is loaded instantly instead of
 re-running the full model; only years without a fresh cache are recomputed.
@@ -42,7 +42,7 @@ COUNTRY_CODE = "CA"
 HH_CATEGORY = "P3_S14"
 FD_CATEGORIES = ["P3_S13", "P3_S14", "P3_S15", "P51G", "P5M"]
 
-# === Years to analyse: any subset of [2017, 2019, 2021] ===
+# === Years to analyse: any subset of [2017, 2019, 2021, 2023] ===
 YEARS = check_years([2017, 2019, 2021])
 
 _HERE = os.path.dirname(os.path.abspath(__file__)) if "__file__" in globals() else os.getcwd()
@@ -305,7 +305,7 @@ for y in YEARS:
 #                        column labels (SHS codes) in D8:<last>8.
 #   COICOP_to_COICOP12 : D59:<last>70 (12 x n), row labels in C59:C70,
 #                        column labels (SHS codes) in D8:<last>8.
-# n = 75 for 2019 and 2021 (different code sets), 77 for 2017 (<last> = CB).
+# n = 75 for 2019, 76 for 2021 (<last> = CA), 77 for 2017 and 2023 (<last> = CB).
 # The 32 and 12 category labels are identical in every year, so years can be
 # compared at those levels.
 # Choose the aggregation level via `coicop_to_coicop_matching` (75, 32, or 12).
