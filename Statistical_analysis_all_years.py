@@ -127,7 +127,7 @@ if category_totals is None:
     print("NOTE: category totals file not found; rerun Household_EF to enable section B3.")
 
 # %% Helpers for tables and charts
-YEAR_COLORS = dict(zip(YEARS, ["#2a78d6", "#eb6834", "#1baf7a"]))
+YEAR_COLORS = dict(zip(YEARS, ["#2a78d6", "#eb6834", "#1baf7a", "#8e5bd0", "#d4a017"]))
 LEVEL_NAMES = {
     "Tenure":     {"1": "Owner w/ mortgage", "2": "Owner w/o mortgage", "3": "Renter"},
     "HHType6":    {"1": "One person", "2": "Couple no kids", "3": "Couple w/ kids",
