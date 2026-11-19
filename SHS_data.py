@@ -1,5 +1,5 @@
 """
-SHS data loader for any survey year (2017, 2019, 2021).
+SHS data loader for any survey year (2017, 2019, 2021, 2023).
 
 Generalises SHS_EDM_2019_data.shs_2019_data: the same weighting and currency
 conversion, but the expenditure columns come from the year's bridge file

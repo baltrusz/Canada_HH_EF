@@ -1,13 +1,14 @@
 """
-Per-year configuration for the multi-year Energy Model (2017, 2019, 2021).
+Per-year configuration for the multi-year Energy Model (2017, 2019, 2021, 2023).
 
 Everything that differs between survey years lives here, so Energy_Model.py
 and Household_EF.py can loop over any subset of YEARS without year-specific
 code:
 
-  - which SHS microdata file to read (2017 = Diary CSV, 2019/2021 = SAS),
-  - the COICOP_to_FIGARO_Bridge_<year>.xlsx file, its sheet names and last
-    COICOP column (2017 has 77 SHS codes -> D:CB, 2019/2021 have 75 -> D:BZ),
+  - which SHS microdata file to read (2017 = Diary CSV, 2019/2021/2023 = SAS),
+  - the COICOP_to_FIGARO_Bridge_<year>.xlsx file and its sheet names. The
+    last COICOP column is found in the bridge itself (the column before
+    "check (primary)" in row 8), see bridge_last_col(),
   - the IEA_data_<year>.xlsx file,
   - the CAD -> EUR exchange rate,
   - renames of SHS socio-demographic variables back to the 2019 names.
@@ -24,7 +25,7 @@ Example usage:
 import os
 import pandas as pd
 
-AVAILABLE_YEARS = [2017, 2019, 2021]
+AVAILABLE_YEARS = [2017, 2019, 2021, 2023]
 
 # Relative to DATA_DIR. Windows-style separators to match the rest of the code.
 _SHS_ROOT = r"Survey of Household Spending"
@@ -39,7 +40,6 @@ YEAR_CONFIG = {
         "bridge_file": "COICOP_to_FIGARO_Bridge_2017.xlsx",
         "bridge_sheet": "COICOP_to_FIGARO_Bridge_2017",
         "aggr_sheet": "COICOP_to_COICOPaggr_2017",
-        "last_col": "CB",           # 77 COICOP columns, D:CB
         "iea_file": "IEA_data_2017.xlsx",
         "exchange_rate": 1.4647,    # CAD per EUR, ECB 2017 (bridge sheet SHS_PUMF_2017!R5)
         # 1000 bootstrap weights for the Diary file (fixed-width text, 12 chars per weight).
@@ -52,7 +52,6 @@ YEAR_CONFIG = {
         "bridge_file": "COICOP_to_FIGARO_Bridge_2019.xlsx",
         "bridge_sheet": "COICOP_to_FIGARO_Bridge",
         "aggr_sheet": "COICOP_to_COICOPaggr",
-        "last_col": "BZ",           # 75 COICOP columns, D:BZ
         "iea_file": "IEA_data_2019.xlsx",
         "exchange_rate": 1.49,      # CAD per EUR, as in the original 2019 model
         "bsw_path": _SHS_ROOT + r"\SHS_EDM_2019\Data\SAS\pumf_shs2019_bsw.sas7bdat",
@@ -64,10 +63,23 @@ YEAR_CONFIG = {
         "bridge_file": "COICOP_to_FIGARO_Bridge_2021.xlsx",
         "bridge_sheet": "COICOP_to_FIGARO_Bridge_2021",
         "aggr_sheet": "COICOP_to_COICOPaggr",
-        "last_col": "BZ",           # 75 COICOP columns, D:BZ (different set than 2019)
         "iea_file": "IEA_data_2021.xlsx",
         "exchange_rate": 1.4826,    # CAD per EUR (bridge sheet SHS_PUMF_2021!O5)
         "bsw_path": _SHS_ROOT + r"\SHS_EDM_2021\RY2021\Data\SAS\pumf_2021_final_bsw.sas7bdat",
+        "bsw_format": "sas",
+    },
+    2023: {
+        # Same PUMF layout and variable names as 2021.
+        "shs_path": _SHS_ROOT + r"\SHS_EDM_2023\RY2023\Data\SAS\pumf_shs2023.sas7bdat",
+        "shs_format": "sas",
+        "bridge_file": "COICOP_to_FIGARO_Bridge_2023.xlsx",
+        "bridge_sheet": "COICOP_to_FIGARO_Bridge_2023",
+        "aggr_sheet": "COICOP_to_COICOPaggr",
+        # IEA 2021 detail scaled to IEA online 2023 sector totals (see the
+        # README_2023 sheet in the workbook).
+        "iea_file": "IEA_data_2023.xlsx",
+        "exchange_rate": 1.4595,    # CAD per EUR (bridge sheet SHS_PUMF_2023!O5)
+        "bsw_path": _SHS_ROOT + r"\SHS_EDM_2023\RY2023\Data\SAS\pumf_2023_final_bsw.sas7bdat",
         "bsw_format": "sas",
     },
 }
@@ -92,6 +104,7 @@ SOCIO_RENAME = {
         "HHTOTINC": "HH_TotInc",
     },
 }
+SOCIO_RENAME[2023] = dict(SOCIO_RENAME[2021])   # 2023 PUMF uses the 2021 names
 
 # Categorical socio-demographic columns stored as strings in the 2019 PUMF.
 _CATEGORICAL = [
@@ -126,7 +139,7 @@ def harmonise_shs(df, year):
 
       - CaseID      : zero-padded 6-digit string ("000010")
       - RP_AgeGrp   : 2-digit string ("01".."06"); 2017 stores 1..6
-      - HHType6     : no leading zero ("1".."6"); 2021 stores "01".."06"
+      - HHType6     : no leading zero ("1".."6"); 2021/2023 store "01".."06"
       - other codes : plain strings ("1", "2", ...)
     """
     df = df.rename(columns=SOCIO_RENAME[year])
@@ -161,16 +174,51 @@ def load_shs_raw(data_dir, year):
     return harmonise_shs(df, year)
 
 
+_LAST_COL_CACHE = {}
+
+
+def bridge_last_col(data_dir, year):
+    """
+    Last COICOP column of the bridge sheet for `year`, as an Excel letter.
+
+    The COICOP codes run from column D in row 8 up to the column just before
+    the "check (primary)" column, so the range follows the bridge file when
+    codes are added or removed (2017: D:CB, 2019: D:BZ, 2021: D:CA,
+    2023: D:CB at the time of writing).
+    """
+    key = (os.path.abspath(data_dir), year)
+    if key not in _LAST_COL_CACHE:
+        from openpyxl.utils import get_column_letter
+        cfg = YEAR_CONFIG[year]
+        row = pd.read_excel(
+            path_for(data_dir, year, "bridge_file"),
+            sheet_name=cfg["bridge_sheet"],
+            header=None,
+            skiprows=7,
+            nrows=1,
+        ).iloc[0]
+        check = [i for i, v in enumerate(row)
+                 if isinstance(v, str) and v.strip().lower().startswith("check")]
+        if not check:
+            raise ValueError(
+                f"Bridge {year}: no 'check (primary)' column in row 8 of "
+                f"{cfg['bridge_file']}!{cfg['bridge_sheet']}"
+            )
+        # Column index is 0-based from column A; the last code sits just before.
+        _LAST_COL_CACHE[key] = get_column_letter(check[0])
+    return _LAST_COL_CACHE[key]
+
+
 def bridge_coicop_codes(data_dir, year):
     """
     SHS expenditure codes used in the bridge for `year`, in bridge column
-    order (row 8 of the bridge sheet, from column D to last_col).
+    order (row 8 of the bridge sheet, from column D to bridge_last_col).
     """
     cfg = YEAR_CONFIG[year]
     row = pd.read_excel(
         path_for(data_dir, year, "bridge_file"),
         sheet_name=cfg["bridge_sheet"],
-        usecols=f"D:{cfg['last_col']}",
+        usecols=f"D:{bridge_last_col(data_dir, year)}",
         header=None,
         skiprows=7,
         nrows=1,

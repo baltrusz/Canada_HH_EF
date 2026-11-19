@@ -1,5 +1,5 @@
 """
-Compares the household energy footprint (EF) across the survey years 2017, 2019 and 2021.
+Compares the household energy footprint (EF) across the survey years 2017, 2019, 2021 and 2023.
 It answers three questions:
 
 - **A. Total footprint:** how much did it change between the years?
@@ -52,7 +52,7 @@ UNIT, UNIT_SCALE = "GJ", 1000  # the pickle holds TJ; results are shown in GJ
 # annual all-items CPI for Canada, 2002 = 100: Table 18-10-0005-01,
 # "Consumer Price Index, annual average, not seasonally adjusted",
 # https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=1810000501
-# Format: {2017: ..., 2019: ..., 2021: ...}. Copy the values from that table.
+# Format: {2017: ..., 2019: ..., 2021: ..., 2023: ...}. Copy the values from that table.
 CPI = None
 
 _HERE = os.path.abspath(os.getcwd())
@@ -65,7 +65,7 @@ category_totals = (pd.read_csv(_stem + "_category_totals.csv")
 
 if "year" not in df.columns:
     raise ValueError("This pickle holds one year only. Rerun Household_EF with "
-                     "YEARS = [2017, 2019, 2021].")
+                     "YEARS = [2017, 2019, 2021, 2023].")
 YEARS = sorted(int(y) for y in df["year"].unique())
 if len(YEARS) < 2:
     raise ValueError(f"Need at least two years in the pickle, found {YEARS}.")
@@ -78,9 +78,9 @@ if MAIN_PAIR not in PAIRS:
     PAIRS.append(MAIN_PAIR)
 
 # --- Harmonise codes so groups mean the same thing in every year ----------
-# 2017 only has "Atlantic" (14) for NL, PE, NS and NB; pool them in 2019/2021 too.
+# 2017 only has "Atlantic" (14) for NL, PE, NS and NB; pool them in 2019/2021/2023 too.
 df["Prov"] = df["Prov"].astype(str).replace({"10": "14", "11": "14", "12": "14", "13": "14"})
-# Major income source 5 ("all sources <= 0") has 2 households in 2021 only: merge into 4 (other).
+# Major income source 5 ("all sources <= 0") exists in 2021 (2 households) and 2023 (6) only: merge into 4 (other).
 df["HH_MajIncSrc"] = df["HH_MajIncSrc"].astype(str).replace({"5": "4"})
 df["Inc_per_OECDcap"] = df["HH_TotInc"] / df["OECD_scale"]
 
@@ -1065,7 +1065,7 @@ display(pd.DataFrame(rows).fillna(""))
 #
 # - **Provinces.** 2017 only has "Atlantic" for NL, PE, NS and NB, so they are pooled in every year.
 # - **Income.** Income enters as deciles *within* each year, which already removes inflation. Nominal income is only used to rank households for the concentration index (A3), and the ranking is unaffected by inflation.
-# - **Main income source.** Code 5 ("all sources <= 0") has 2 households, in 2021 only. It is merged into "Other / none".
+# - **Main income source.** Code 5 ("all sources <= 0") has 2 households in 2021 and 6 in 2023, and does not exist in earlier years. It is merged into "Other / none".
 # - **Territories and "education not stated".** Statistics Canada does not publish education for the Territories in 2017 and 2019; all their households are coded "not stated". The two cannot be separated in a regression, so the regressions (C2–C5) leave out Territories households and households with education not stated. The cell above C2 prints how many households that is (Territories are about 0.3% of the population). The descriptive results (A, B, C1) include everyone.
-# - **Number of bedrooms** is left out of the drivers. "Not stated" exists in 2017/2019 but not in 2021, and the number of bedrooms is largely a consequence of household type and income.
+# - **Number of bedrooms** is left out of the drivers. "Not stated" exists in 2017/2019 but not in 2021 or 2023, and the number of bedrooms is largely a consequence of household type and income.
 # - **Urban/rural** is not in the SHS public-use files, so it cannot be tested.
