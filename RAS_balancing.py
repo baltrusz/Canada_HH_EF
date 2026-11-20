@@ -357,7 +357,7 @@ if __name__ == "__main__":
     from NACE_COICOP_mask import nace_to_coicop_mask
 
     figaro_result = figaro_economic_data(
-        figaro_folder=r"C:\Users\marta.baltruszewicz\OneDrive - Asplan Viak\Documents - 403001-01 Utvikling og vedlikehold klimakost\General\Utslippsfaktorer\Kryssløpsanalyse\FIGARO data",
+        figaro_folder=r"C:\Users\marta.baltruszewicz\OneDrive - Asplan Viak\Documents - 403001-01 Utvikling og vedlikehold klimakost\General\2 Utvikling av utslippsfaktorer\Economic_factors\IO model data",
         first_year=2019,
         last_year=2019,
         country_code="CA",

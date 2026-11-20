@@ -28,7 +28,7 @@ import json
 import numpy as np
 import pandas as pd
 
-from year_config import YEAR_CONFIG, check_years, path_for, load_shs_raw
+from year_config import YEAR_CONFIG, check_years, path_for, load_shs_raw, bridge_last_col
 
 # ============================================================================
 # Configuration — override these to point at your own data locations or to
@@ -37,13 +37,13 @@ from year_config import YEAR_CONFIG, check_years, path_for, load_shs_raw
 # anywhere without editing Energy_Model.py.
 # ============================================================================
 DATA_DIR = r"C:\Users\marta.baltruszewicz\OneDrive - Asplan Viak\Documents\additional_projects\Canada_hh_energy\Data"
-FIGARO_FOLDER = r"C:\Users\marta.baltruszewicz\OneDrive - Asplan Viak\Documents - 403001-01 Utvikling og vedlikehold klimakost\General\Utslippsfaktorer\Kryssløpsanalyse\FIGARO data"
+FIGARO_FOLDER = r"C:\Users\marta.baltruszewicz\OneDrive - Asplan Viak\Documents - 403001-01 Utvikling og vedlikehold klimakost\General\2 Utvikling av utslippsfaktorer\Economic_factors\IO model data"
 COUNTRY_CODE = "CA"
 HH_CATEGORY = "P3_S14"
 FD_CATEGORIES = ["P3_S13", "P3_S14", "P3_S15", "P51G", "P5M"]
 
 # === Years to analyse: any subset of [2017, 2019, 2021, 2023] ===
-YEARS = check_years([2017, 2019, 2021])
+YEARS = check_years([2017, 2019, 2021, 2023])
 
 _HERE = os.path.dirname(os.path.abspath(__file__)) if "__file__" in globals() else os.getcwd()
 _ENERGY_MODEL_PATH = os.path.join(_HERE, "Energy_Model.py")
@@ -84,13 +84,23 @@ _KEYS = [
 ]
 
 
+def _input_files(year):
+    """Data files of `year` whose mtime also invalidates that year's cache."""
+    return [
+        path_for(DATA_DIR, year, "shs_path"),
+        path_for(DATA_DIR, year, "bridge_file"),
+        path_for(DATA_DIR, year, "iea_file"),
+        os.path.join(DATA_DIR, "IEA_NACE_mapping.xlsx"),
+    ]
+
+
 def _cache_is_fresh(year) -> bool:
     path = _cache_path(year)
     if not os.path.exists(path):
         return False
     cache_mtime = os.path.getmtime(path)
-    for name in _SOURCE_FILES:
-        src = os.path.join(_HERE, name)
+    sources = [os.path.join(_HERE, name) for name in _SOURCE_FILES] + _input_files(year)
+    for src in sources:
         if os.path.exists(src) and os.path.getmtime(src) > cache_mtime:
             return False
     return True
@@ -305,7 +315,8 @@ for y in YEARS:
 #                        column labels (SHS codes) in D8:<last>8.
 #   COICOP_to_COICOP12 : D59:<last>70 (12 x n), row labels in C59:C70,
 #                        column labels (SHS codes) in D8:<last>8.
-# n = 75 for 2019, 76 for 2021 (<last> = CA), 77 for 2017 and 2023 (<last> = CB).
+# n = 75 for 2019, 76 for 2021, 77 for 2017 and 2023 (each year has its own
+# code set). <last> is found in the bridge, see year_config.bridge_last_col.
 # The 32 and 12 category labels are identical in every year, so years can be
 # compared at those levels.
 # Choose the aggregation level via `coicop_to_coicop_matching` (75, 32, or 12).
@@ -317,7 +328,7 @@ def _load_aggr_matrix(year: int, skiprows: int, nrows: int) -> pd.DataFrame:
     """Read one aggregation block: 'nrows' x n_COICOP with labels in col C."""
     cfg = YEAR_CONFIG[year]
     bridge_path = path_for(DATA_DIR, year, "bridge_file")
-    last = cfg["last_col"]
+    last = bridge_last_col(DATA_DIR, year)
     # COICOP column headers from Excel row 8 (cells D8:<last>8).
     col_headers = (
         pd.read_excel(
@@ -768,7 +779,7 @@ _VAR_SPECS = {
                     "Has vehicle", False),
     "HH_MajIncSrc": ({"1": "Employment income", "2": "Investment income",
                       "3": "Govt transfers", "4": "Other income",
-                      "5": "All sources <= 0"},   # StatCan PUMF codes; 5 only in 2021
+                      "5": "All sources <= 0"},   # StatCan PUMF codes; 5 only in 2021 and 2023
                      "Major household income source", False),
 }
 
